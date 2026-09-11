@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -7,6 +7,9 @@ import { useStore, dateLabel, type Task } from "./store";
 import EditorScreen from "./EditorScreen";
 import DrawingScreen from "./DrawingScreen";
 import FolderHome from "./FolderHome";
+import ReaderHome from "./reader/ReaderHome";
+import ReadFolderHome from "./reader/ReadFolderHome";
+import PDFViewer from "./reader/PDFViewer";
 
 export function Sheet({
   title,
@@ -49,11 +52,16 @@ export default function App() {
     updateNote,
     saveTask,
     deleteTask,
+    clearReadLibrary,
   } = useStore();
-  const [tab, setTab] = useState<"notes" | "tasks">("notes");
+  const [tab, setTab] = useState<"notes" | "read" | "tasks">("notes");
+  const [readerDocId, setReaderDocId] = useState<string | null>(null);
+  const [readFolder, setReadFolder] = useState("All");
+  const [readFolderHome, setReadFolderHome] = useState(false);
   const [screen, setScreen] = useState<"list" | "editor" | "drawing">("list");
   const [noteId, setNoteId] = useState("");
   const [drawingPosition, setDrawingPosition] = useState<number>();
+  const [drawingId, setDrawingId] = useState<string>();
   const [focusAfterDrawing, setFocusAfterDrawing] = useState(false);
   const [folder, setFolder] = useState("All");
   const [folderHome, setFolderHome] = useState(true);
@@ -70,6 +78,7 @@ export default function App() {
   const openNote = (id: string) => {
     setFolderHome(false);
     setDrawingPosition(undefined);
+    setDrawingId(undefined);
     setFocusAfterDrawing(false);
     setNoteId(id);
     setScreen("editor");
@@ -145,83 +154,136 @@ export default function App() {
           transition={{ duration: 0.12 }}
         >
           {screen === "list" && (
-            <div className="list-screen">
-              <header className="topbar">
-                {tab === "notes" && !folderHome && !trash && (
-                  <div className="home-back">
-                    <IconButton
-                      icon="back"
-                      label="Back to folders"
-                      onClick={() => {
-                        setFolderHome(true);
-                        setSearch(false);
-                        setQuery("");
-                      }}
-                    />
-                  </div>
-                )}
-                <h1>
-                  {trash
-                    ? "Recently deleted"
-                    : tab === "notes"
-                      ? !folderHome && folder !== "All"
-                        ? folder
-                        : "Notes"
-                      : "Tasks"}
-                </h1>
-                <div className="top-actions">
-                  {tab === "notes" && (
-                    <IconButton
-                      icon="folder"
-                      label="Folders"
-                      onClick={() => {
-                        setFolderHome(true);
-                        setTrash(false);
-                      }}
-                    />
-                  )}
-                  <IconButton
-                    icon="settings"
-                    label="Settings"
-                    onClick={() => setPanel("settings")}
-                  />
-                </div>
-              </header>
-              {tab === "notes" && !folderHome && (
-                <>
-                  <nav className="folder-tabs" aria-label="Note folders">
-                    {["All", ...folders].map((f) => (
-                      <button
-                        key={f}
-                        className={folder === f ? "selected" : ""}
-                        onClick={() => setFolder(f)}
-                      >
-                        {f}
-                      </button>
-                    ))}
-                  </nav>
-                  {search && (
-                    <label className="search">
-                      <Icon name="search" />
-                      <input
-                        autoFocus
-                        placeholder="Search notes"
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                      />
+            tab === "read" && readerDocId ? (
+              <PDFViewer
+                key={readerDocId}
+                docId={readerDocId}
+                onBack={() => setReaderDocId(null)}
+                onInsertIntoNote={(docId, pageNum) => {
+                  sessionStorage.setItem('pendingPdfInsert', JSON.stringify({ docId, pageNum }));
+                  setTab('notes');
+                  setFolderHome(false);
+                }}
+              />
+            ) : (
+              <div className="list-screen">
+                <header className="topbar">
+                  {((tab === "notes" && !folderHome && !trash) || (tab === "read" && (readFolderHome || readFolder !== "All"))) && (
+                    <div className="home-back">
                       <IconButton
-                        icon="close"
-                        label="Close search"
+                        icon="back"
+                        label={tab === "notes" ? "Back to folders" : readFolderHome ? "Back to library" : "Back to parent folder"}
                         onClick={() => {
-                          setSearch(false);
-                          setQuery("");
+                          if (tab === "notes") {
+                            setFolderHome(true);
+                            setSearch(false);
+                            setQuery("");
+                          } else {
+                            if (readFolderHome) {
+                              setReadFolderHome(false);
+                              setReadFolder("All");
+                            } else {
+                              const parent = readFolder.includes('/') ? readFolder.slice(0, readFolder.lastIndexOf('/')) : 'All';
+                              setReadFolder(parent);
+                            }
+                          }
                         }}
                       />
-                    </label>
+                    </div>
                   )}
-                </>
-              )}
-              {tab === "notes" && folderHome && !trash ? (
+                  <h1>
+                    {trash
+                      ? "Recently deleted"
+                      : tab === "notes"
+                        ? !folderHome && folder !== "All"
+                          ? folder
+                          : "Notes"
+                        : tab === "read"
+                          ? readFolderHome
+                            ? "Document folders"
+                            : readFolder !== "All"
+                              ? readFolder.includes('/') ? readFolder.split('/').pop() : readFolder
+                              : "Read"
+                          : "Tasks"}
+                  </h1>
+                  <div className="top-actions">
+                    {tab === "notes" && (
+                      <IconButton
+                        icon="folder"
+                        label="Folders"
+                        onClick={() => {
+                          setFolderHome(true);
+                          setTrash(false);
+                        }}
+                      />
+                    )}
+                    {tab === "read" && !readFolderHome && (
+                      <IconButton
+                        icon="folder"
+                        label="Document folders"
+                        onClick={() => {
+                          setReadFolderHome(true);
+                        }}
+                      />
+                    )}
+                    <IconButton
+                      icon="settings"
+                      label="Settings"
+                      onClick={() => setPanel("settings")}
+                    />
+                  </div>
+                </header>
+                {tab === "notes" && !folderHome && (
+                  <>
+                    <nav className="folder-tabs" aria-label="Note folders">
+                      {["All", ...folders].map((f) => (
+                        <button
+                          key={f}
+                          className={folder === f ? "selected" : ""}
+                          onClick={() => setFolder(f)}
+                        >
+                          {f}
+                        </button>
+                      ))}
+                    </nav>
+                    {search && (
+                      <label className="search">
+                        <Icon name="search" />
+                        <input
+                          autoFocus
+                          placeholder="Search notes"
+                          value={query}
+                          onChange={(e) => setQuery(e.target.value)}
+                        />
+                        <IconButton
+                          icon="close"
+                          label="Close search"
+                          onClick={() => {
+                            setSearch(false);
+                            setQuery("");
+                          }}
+                        />
+                      </label>
+                    )}
+                  </>
+                )}
+                {tab === "read" ? (
+                  readFolderHome ? (
+                    <ReadFolderHome
+                      onOpen={(name) => {
+                        setReadFolder(name);
+                        setReadFolderHome(false);
+                      }}
+                    />
+                  ) : (
+                    <ReaderHome
+                      folder={readFolder}
+                      onSelectFolder={setReadFolder}
+                      onOpenFolderHome={() => setReadFolderHome(true)}
+                      onOpen={(id) => setReaderDocId(id)}
+                    />
+                  )
+                ) : tab === "notes" && folderHome && !trash ? (
                 <FolderHome
                   onOpen={(name) => {
                     setFolder(name);
@@ -247,8 +309,8 @@ export default function App() {
                             <p>{n.preview || "No text"}</p>
                             <time>{dateLabel(n.date)}</time>
                           </div>
-                          {n.drawingPreview && (
-                            <img src={n.drawingPreview} alt="Drawing preview" />
+                          {(n.drawings?.[0]?.preview || n.drawingPreview) && (
+                            <img src={n.drawings?.[0]?.preview || n.drawingPreview} alt="Drawing preview" />
                           )}
                         </button>
                       ))
@@ -309,7 +371,7 @@ export default function App() {
                   )}
                 </div>
               )}
-              {!trash && (
+              {!trash && tab !== "read" && (
                 <button
                   className="fab"
                   aria-label={tab === "notes" ? "New note" : "New task"}
@@ -327,7 +389,7 @@ export default function App() {
                 </button>
               )}
               <nav className="bottom-nav" aria-label="Main navigation">
-                {(["notes", "tasks"] as const).map((t) => (
+                {(["notes", "read", "tasks"] as const).map((t) => (
                   <button
                     key={t}
                     className={tab === t ? "active" : ""}
@@ -335,14 +397,19 @@ export default function App() {
                       setTab(t);
                       setTrash(false);
                       if (t === "notes") setFolderHome(true);
+                      if (t === "read") {
+                        setReaderDocId(null);
+                        setReadFolderHome(false);
+                      }
                     }}
                   >
                     <Icon name={t} size={23} />
-                    <span>{t === "notes" ? "Notes" : "Tasks"}</span>
+                    <span>{t === "notes" ? "Notes" : t === "read" ? "Read" : "Tasks"}</span>
                   </button>
                 ))}
               </nav>
             </div>
+            )
           )}
           {screen === "editor" && note && (
             <EditorScreen
@@ -350,18 +417,30 @@ export default function App() {
               note={note}
               onBack={() => setScreen("list")}
               drawingPosition={drawingPosition}
+              drawingId={drawingId}
               focusAfterDrawing={focusAfterDrawing}
-              onDraw={(position) => {
+              onDraw={(position, existingDrawingId) => {
                 setDrawingPosition(position);
+                setDrawingId(existingDrawingId || crypto.randomUUID());
                 setFocusAfterDrawing(false);
                 setScreen("drawing");
               }}
+              onOpenReader={(docId) => {
+                setScreen("list");
+                setTab("read");
+                setReaderDocId(docId);
+              }}
+              onNewNote={() =>
+                openNote(addNote(!folderHome && folder !== "All" ? folder : ""))
+              }
             />
           )}
           {screen === "drawing" && note && (
             <DrawingScreen
               note={note}
-              onDone={() => {
+              drawingId={drawingId}
+              onDone={(savedDrawingId) => {
+                setDrawingId(savedDrawingId);
                 setFocusAfterDrawing(true);
                 setScreen("editor");
               }}
@@ -405,6 +484,27 @@ export default function App() {
             }}
           >
             {trash ? "All notes" : "Recently deleted"}
+            <Icon name="trash" />
+          </button>
+          <button
+            className="setting-row danger"
+            onClick={async () => {
+              if (!confirm('Remove all documents, folders, and thumbnails from the Read library? This cannot be undone.')) return;
+              // Clear the store
+              clearReadLibrary();
+              // Also delete all stored PDF blobs from IndexedDB
+              try {
+                const { deleteAllPdfFiles } = await import('./reader/storage');
+                await deleteAllPdfFiles();
+              } catch { /* ignore if helper not available */ }
+              setPanel(null);
+              setTab('read');
+              setReaderDocId(null);
+              setReadFolder('All');
+              setReadFolderHome(false);
+            }}
+          >
+            Clear Read library
             <Icon name="trash" />
           </button>
           <p className="helper">

@@ -7,6 +7,15 @@ test("opening folders can be recolored and renamed without losing notes", async 
   page.on("pageerror", (e) => errors.push(e.message));
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/");
+  await page.getByRole('button', {name:'New folder',exact:true}).click();
+  await page.getByLabel('Folder label', {exact:true}).fill('ANSWER IDEAS');
+  await page.getByRole('button', {name:'Save folder',exact:true}).click();
+  await page.getByRole('button', {name:'Open folder ANSWER IDEAS',exact:true}).click();
+  await page.getByRole('button', {name:'New note',exact:true}).click();
+  await page.getByLabel('Note title').fill('Existing folder note');
+  await page.getByRole('button', {name:'Back to notes',exact:true}).click();
+  await page.getByRole('button', {name:'Back to folders',exact:true}).click();
+
   await expect(
     page.getByRole("region", { name: "Your folders" }),
   ).toBeVisible();
@@ -35,7 +44,7 @@ test("opening folders can be recolored and renamed without losing notes", async 
   );
   await folder.click();
   await expect(
-    page.getByRole("button", { name: /This is not good as hell/ }),
+    page.getByRole("button", { name: /Existing folder note/ }),
   ).toBeVisible();
   await page.getByRole("button", { name: "New note" }).click();
   await page.getByLabel("Note title").fill("Inside my folder");
@@ -57,6 +66,10 @@ test("create folder with custom color and reject duplicate labels", async ({
   page,
 }) => {
   await page.goto("/");
+  await page.getByRole('button', {name:'New folder',exact:true}).click();
+  await page.getByLabel('Folder label', {exact:true}).fill('Excerpts');
+  await page.getByRole('button', {name:'Save folder',exact:true}).click();
+
   await page.getByRole("button", { name: "New folder", exact: true }).click();
   await page.getByLabel("Folder label", { exact: true }).fill("Travel");
   await page.getByLabel("Custom folder color").fill("#123abc");

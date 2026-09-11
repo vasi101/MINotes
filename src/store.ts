@@ -19,6 +19,14 @@ export type DrawingImage = {
   rotation: number;
 };
 export type Drawing = { strokes: Stroke[]; images: DrawingImage[] };
+export type DrawingPage = {
+  id: string;
+  drawing: Drawing;
+  preview?: string;
+  width: number;
+  height: number;
+  displayWidth?: number;
+};
 export type Note = {
   id: string;
   title: string;
@@ -31,6 +39,8 @@ export type Note = {
   drawing?: Drawing;
   drawingPreview?: string;
   drawingEmbedded?: boolean;
+  drawingWidth?: number;
+  drawings?: DrawingPage[];
 };
 export type Task = {
   id: string;
@@ -39,19 +49,17 @@ export type Task = {
   reminder: string;
   repeat: string;
 };
-const seeds = [
-  ["This is not good as hell", "FILLING WITH THE STOCK", "9:03 AM"],
-  ["legitimate interests of citizens.”", "", "Yesterday 3:59 PM"],
-  ["Bhadra 26", "Public service delivery", "Yesterday 12:54 PM"],
-  ["prudent", "", "Yesterday 12:05 PM"],
-  ["Eternal Sunshine of the Spotless Mind", "", "Yesterday 9:08 AM"],
-  ["TRANSPARANCY", "Fish in flood -", "September 3"],
-];
 type State = {
   readDocuments: ReadDocument[];
   addReadDocument: (document:ReadDocument)=>void;
   updateReadDocument: (id:string,patch:Partial<ReadDocument>)=>void;
   removeReadDocument: (id:string)=>void;
+  clearReadLibrary: () => void;
+  readFolders: string[];
+  readFolderColors: Record<string, string>;
+  addReadFolder: (name: string, color?: string) => void;
+  customizeReadFolder: (oldName: string, name: string, color: string) => void;
+  deleteReadFolder: (name: string) => void;
   notes: Note[];
   tasks: Task[];
   folders: string[];
@@ -72,38 +80,47 @@ export const useStore = create<State>()(
       addReadDocument: document=>set(s=>({readDocuments:[document,...s.readDocuments]})),
       updateReadDocument: (id,patch)=>set(s=>({readDocuments:s.readDocuments.map(doc=>doc.id===id?{...doc,...patch}:doc)})),
       removeReadDocument: id=>set(s=>({readDocuments:s.readDocuments.filter(doc=>doc.id!==id)})),
-      notes: seeds.map(([title, preview, date], i) => ({
-        id: `note-${i}`,
-        title,
-        preview,
-        html: preview ? `<p>${preview}</p>` : "",
-        date,
-        folder: i === 2 ? "Excerpts" : "ANSWER IDEAS",
-      })),
-      tasks: [
-        {
-          id: "task-1",
-          title: "Code of Conduct",
-          completed: false,
-          reminder: "",
-          repeat: "",
-        },
-        {
-          id: "task-2",
-          title: "Test",
-          completed: false,
-          reminder: "2026-09-06T14:24",
-          repeat: "every day",
-        },
-        {
-          id: "task-3",
-          title: "POLICY",
-          completed: false,
-          reminder: "",
-          repeat: "",
-        },
-      ],
-      folders: ["ANSWER IDEAS", "Excerpts", "Rishi Expensive"],
+      clearReadLibrary: () => set({ readDocuments: [], readFolders: [], readFolderColors: {} }),
+      readFolders: [],
+      readFolderColors: {},
+      addReadFolder: (name, color) =>
+        set((s) => ({
+          readFolders: s.readFolders.includes(name) ? s.readFolders : [...s.readFolders, name],
+          readFolderColors: color ? { ...s.readFolderColors, [name]: color } : s.readFolderColors,
+        })),
+      customizeReadFolder: (oldName, name, color) =>
+        set((s) => {
+          if (!s.readFolders.includes(oldName) || !name.trim() || (name !== oldName && s.readFolders.includes(name))) return s;
+          const readFolderColors = { ...s.readFolderColors };
+          delete readFolderColors[oldName];
+          readFolderColors[name] = color;
+          const renamePath = (p: string) => {
+            if (p === oldName) return name;
+            if (p.startsWith(oldName + '/')) return name + p.slice(oldName.length);
+            return p;
+          };
+          return {
+            readFolders: s.readFolders.map(renamePath),
+            readFolderColors,
+            readDocuments: s.readDocuments.map(d => d.folder ? { ...d, folder: renamePath(d.folder) } : d),
+          };
+        }),
+      deleteReadFolder: (name) =>
+        set((s) => {
+          const readFolderColors = { ...s.readFolderColors };
+          Object.keys(readFolderColors).forEach(k => {
+            if (k === name || k.startsWith(name + '/')) delete readFolderColors[k];
+          });
+          const isDeleted = (p: string) => p === name || p.startsWith(name + '/');
+          return {
+            readFolders: s.readFolders.filter(f => !isDeleted(f)),
+            readFolderColors,
+            readDocuments: s.readDocuments.map(d => (d.folder && isDeleted(d.folder)) ? { ...d, folder: undefined } : d),
+          };
+        }),
+      notes: [],
+      tasks: [],
+      folders: [],
       folderColors: {},
       theme: "dark",
       updateNote: (id, patch) =>

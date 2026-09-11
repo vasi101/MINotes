@@ -17,7 +17,7 @@ export async function exportPdf(bytes:Uint8Array,source:PDFDocumentProxy,pages:n
       }
       for(let p=2;p<mark.points.length;p+=2){
         const [x1,y1]=point(mark.points[p-2],mark.points[p-1]),[x2,y2]=point(mark.points[p],mark.points[p+1]);
-        page.drawLine({start:{x:x1,y:y1},end:{x:x2,y:y2},thickness:mark.width*viewport.width/viewport.userUnit,color});
+        page.drawLine({start:{x:x1,y:y1},end:{x:x2,y:y2},thickness:mark.width*viewport.width/viewport.userUnit,color,opacity:mark.kind==='marker'?.32:1,blendMode:mark.kind==='marker'?BlendMode.Multiply:BlendMode.Normal});
       }
     }
   }

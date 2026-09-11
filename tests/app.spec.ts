@@ -16,7 +16,7 @@ test("notes, tasks and editor survive reload; trash restores notes", async ({
   await capture(page, "artifacts/notes.png");
   await page.getByRole("button", { name: "Tasks", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "Code of Conduct" }),
+    page.getByText("No tasks yet", { exact: true }),
   ).toBeVisible();
   await capture(page, "artifacts/tasks.png");
   await page.getByRole("button", { name: "New task" }).click();
@@ -63,6 +63,36 @@ test("notes, tasks and editor survive reload; trash restores notes", async ({
   await page.getByRole("button", { name: "Restore note" }).click();
   expect(errors).toEqual([]);
 });
+test("editor supports Word-style keyboard shortcuts", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "New note" }).click();
+  await page.getByLabel("Note title").fill("Shortcut note");
+  const content = page.getByLabel("Note content");
+  await content.fill("Bold text");
+  await content.press("Control+a");
+  await content.press("Control+b");
+  await content.press("Control+i");
+  await content.press("Control+u");
+  await content.press("End");
+  await content.press("Enter");
+  await content.pressSequentially("List item");
+  await content.press("Control+Shift+8");
+  await content.press("Control+s");
+
+  await expect(content.locator("strong").filter({ hasText: "Bold text" })).toHaveCount(1);
+  await expect(content.locator("em").filter({ hasText: "Bold text" })).toHaveCount(1);
+  await expect(content.locator("u").filter({ hasText: "Bold text" })).toHaveCount(1);
+  await expect(content.locator("ul")).toContainText("List item");
+  const state = await page.evaluate(() => JSON.parse(localStorage.getItem("minotes-v1")!).state);
+  expect(state.notes[0].html).toContain("<strong>");
+});
+test("editor shortcut creates a new note", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "New note" }).click();
+  await page.getByLabel("Note title").fill("Shortcut note");
+  await page.getByLabel("Note content").press("Control+n");
+  await expect(page.getByLabel("Note title")).toHaveValue("");
+});
 test("drawing tools, history, colors, save and reopen", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -103,7 +133,10 @@ test("drawing tools, history, colors, save and reopen", async ({ page }) => {
   await page.reload();
   await page.getByRole("button", { name: "All notes", exact: true }).click();
   await page.getByRole("button", { name: /Sketch/ }).click();
-  await page.getByRole("button", { name: "Edit drawing" }).click();
+  const drawingPreview = page.getByRole("button", { name: "Edit drawing" });
+  await drawingPreview.click();
+  await expect(page.getByRole("button", { name: "Resize drawing" })).toBeVisible();
+  await drawingPreview.dblclick();
   await expect(
     page.getByRole("button", { name: "Save drawing" }),
   ).toBeVisible();
@@ -151,6 +184,31 @@ test("drawing image transform and eraser edits are saved", async ({ page }) => {
   expect(drawing.images[0].x).toBeGreaterThan(100);
   expect(drawing.strokes).toHaveLength(0);
   expect(errors).toEqual([]);
+});
+test("imported note images can be freely resized and persist dimensions", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "New note" }).click();
+  await page.getByLabel("Note title").fill("Resizable note image");
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Insert image" }).click();
+  await (await chooser).setFiles("src-tauri/icons/128x128.png");
+
+  const image = page.locator(".resizable-image img");
+  await expect(image).toBeVisible();
+  await image.click();
+  const handle = page.getByRole("button", { name: "Resize image" });
+  await expect(handle).toBeVisible();
+  const box = await handle.boundingBox();
+  if (!box) throw new Error("Resize handle is not measurable");
+  await page.mouse.move(box.x + 4, box.y + 4);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 64, box.y + 42, { steps: 5 });
+  await page.mouse.up();
+
+  await expect(image).toHaveAttribute("style", /width:\s*\d+px;\s*height:\s*\d+px/);
+  const state = await page.evaluate(() => JSON.parse(localStorage.getItem("minotes-v1")!).state);
+  expect(state.notes[0].html).toContain("width");
+  expect(state.notes[0].html).toContain("height");
 });
 test("desktop fills the window and light mode works", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });

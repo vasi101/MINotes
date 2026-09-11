@@ -16,6 +16,7 @@
         "width": 1280,
         "height": 900,
         "maximized": true,
+        "zoomHotkeysEnabled": true,
         "minWidth": 360,
         "minHeight": 600,
         "decorations": false,

@@ -25,7 +25,7 @@ test("save drawing continues on next line and preserves text when edited again",
   await expect(content.locator("p").first()).toHaveText("Before drawing");
   await content.press("Enter");
   await page.keyboard.type("Another line");
-  await page.getByRole("button", { name: "Edit drawing" }).click();
+  await page.getByRole("button", { name: "Edit drawing" }).dblclick();
   await page.getByRole("button", { name: "Save drawing" }).click();
   await expect(content.locator(".drawing-block")).toHaveCount(1);
   await expect(content.locator(".node-drawing + p")).toHaveText(
@@ -79,4 +79,25 @@ test("older drawings gain an editable next line without duplication", async ({
   await expect(content.locator(".node-drawing + p")).toHaveText(
     "Now I can continue",
   );
+});
+
+test("drawing notes support repeated independent drawings", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "New note" }).click();
+  await page.getByLabel("Note title").fill("Many drawing pages");
+  await page.getByRole("button", { name: "Draw", exact: true }).click();
+  await page.getByLabel("Page width").fill("1200");
+  await page.getByRole("button", { name: "Save drawing" }).click();
+  await expect(page.locator(".drawing-block")).toHaveCount(1);
+  await page.getByRole("button", { name: "Draw", exact: true }).click();
+  await page.getByLabel("Page height").fill("700");
+  await page.getByRole("button", { name: "Save drawing" }).click();
+  await expect(page.locator(".drawing-block")).toHaveCount(2);
+
+  const state = await page.evaluate(() => JSON.parse(localStorage.getItem("minotes-v1")!).state);
+  expect(state.notes[0].drawings).toHaveLength(2);
+  expect(state.notes[0].drawings[0].width).toBe(1200);
+  expect(state.notes[0].drawings[1].height).toBe(700);
 });

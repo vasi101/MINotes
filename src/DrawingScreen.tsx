@@ -3,6 +3,7 @@ import {
   Stage,
   Layer,
   Line,
+  Rect,
   Image as KonvaImage,
   Transformer,
 } from "react-konva";
@@ -13,6 +14,7 @@ import {
   useStore,
   type Note,
   type Drawing,
+  type DrawingPage,
   type DrawingImage,
   type Stroke,
 } from "./store";
@@ -60,7 +62,10 @@ function CanvasImage({
     img.src = item.src;
   }, [item.src]);
   useEffect(() => {
-    if (selected && ref.current) transformer.current?.nodes([ref.current]);
+    if (selected && ref.current && transformer.current) {
+      transformer.current.nodes([ref.current]);
+      transformer.current.getLayer()?.batchDraw();
+    }
   }, [selected, image]);
   return (
     <>
@@ -92,6 +97,8 @@ function CanvasImage({
         <Transformer
           ref={transformer}
           flipEnabled={false}
+          keepRatio={true}
+          rotateEnabled={false}
           boundBoxFunc={(old, b) => (b.width < 15 || b.height < 15 ? old : b)}
         />
       )}
@@ -100,15 +107,24 @@ function CanvasImage({
 }
 export default function DrawingScreen({
   note,
+  drawingId,
   onDone,
 }: {
   note: Note;
-  onDone: () => void;
+  drawingId?: string;
+  onDone: (drawingId: string) => void;
 }) {
   const updateNote = useStore((s) => s.updateNote);
-  const [history, setHistory] = useState<Drawing[]>([
-    note.drawing || { strokes: [], images: [] },
-  ]);
+  const resolvedDrawingId = drawingId || crypto.randomUUID();
+  const existing = note.drawings?.find((item) => item.id === resolvedDrawingId);
+  const [record, setRecord] = useState<DrawingPage>(() => existing || {
+    id: resolvedDrawingId,
+    drawing: resolvedDrawingId === "legacy" ? (note.drawing || { strokes: [], images: [] }) : { strokes: [], images: [] },
+    preview: resolvedDrawingId === "legacy" ? note.drawingPreview : undefined,
+    width: 900,
+    height: 1200,
+  });
+  const [history, setHistory] = useState<Drawing[]>([record.drawing]);
   const [index, setIndex] = useState(0);
   const drawing = history[index];
   const [active, setActive] = useState<Stroke | null>(null);
@@ -162,6 +178,7 @@ export default function DrawingScreen({
     setHistory((h) => [...h.slice(0, index + 1), next]);
     setIndex(index + 1);
   };
+  const updateRecord = (patch: Partial<DrawingPage>) => setRecord((item) => ({ ...item, ...patch }));
   const undo = () => {
     setIndex((i) => Math.max(0, i - 1));
     setSelected("");
@@ -190,16 +207,58 @@ export default function DrawingScreen({
       st.scale({ x: 1, y: 1 });
       const tr = st.find("Transformer");
       tr.forEach((n) => n.hide());
-      const preview = st.toDataURL({ pixelRatio: 1 });
+      const points = drawing.strokes.flatMap((stroke) => stroke.points);
+      let minX = Number.POSITIVE_INFINITY;
+      let minY = Number.POSITIVE_INFINITY;
+      let maxX = Number.NEGATIVE_INFINITY;
+      let maxY = Number.NEGATIVE_INFINITY;
+      for (let i = 0; i < points.length; i += 2) {
+        minX = Math.min(minX, points[i]);
+        minY = Math.min(minY, points[i + 1]);
+        maxX = Math.max(maxX, points[i]);
+        maxY = Math.max(maxY, points[i + 1]);
+      }
+      for (const image of drawing.images) {
+        minX = Math.min(minX, image.x);
+        minY = Math.min(minY, image.y);
+        maxX = Math.max(maxX, image.x + image.width);
+        maxY = Math.max(maxY, image.y + image.height);
+      }
+      if (!Number.isFinite(minX)) {
+        minX = 0;
+        minY = 0;
+        maxX = 120;
+        maxY = 120;
+      }
+      const padding = 20;
+      const cropX = Math.max(0, minX - padding);
+      const cropY = Math.max(0, minY - padding);
+      const cropRight = Math.min(record.width, maxX + padding);
+      const cropBottom = Math.min(record.height, maxY + padding);
+      const preview = st.toDataURL({
+        x: cropX,
+        y: cropY,
+        width: Math.max(1, cropRight - cropX),
+        height: Math.max(1, cropBottom - cropY),
+        pixelRatio: 1,
+      });
       tr.forEach((n) => n.show());
       st.position(oldPosition);
       st.scale(oldScale);
+      const saved = { ...record, id: resolvedDrawingId, drawing, preview };
+      const drawings = note.drawings || [];
+      const nextDrawings = resolvedDrawingId === "legacy"
+        ? drawings
+        : drawings.some((item) => item.id === resolvedDrawingId)
+          ? drawings.map((item) => item.id === resolvedDrawingId ? saved : item)
+          : [...drawings, saved];
       updateNote(note.id, {
+        drawings: nextDrawings,
         drawing,
         drawingPreview: preview,
         date: new Date().toISOString(),
       });
-      onDone();
+      onDone(resolvedDrawingId);
     } catch {
       setError("Could not save this drawing. Try a smaller image.");
     }
@@ -313,6 +372,19 @@ export default function DrawingScreen({
         onPointerUp={finish}
         onPointerCancel={finish}
       >
+        <Layer listening={false}>
+          <Rect
+            x={0}
+            y={0}
+            width={record.width}
+            height={record.height}
+            fill="#fff"
+            shadowColor="#000"
+            shadowBlur={18}
+            shadowOpacity={0.16}
+            shadowOffset={{ x: 0, y: 4 }}
+          />
+        </Layer>
         <Layer>
           {drawing.images.map((item) => (
             <CanvasImage
@@ -342,8 +414,8 @@ export default function DrawingScreen({
               strokeWidth={s.width}
               opacity={s.opacity}
               tension={0.35}
-              lineCap="round"
-              lineJoin="round"
+              lineCap={s.tool === "Marker" ? "butt" : "round"}
+              lineJoin={s.tool === "Marker" ? "miter" : "round"}
               globalCompositeOperation={
                 s.tool === "Eraser" ? "destination-out" : "source-over"
               }
@@ -390,6 +462,10 @@ export default function DrawingScreen({
           <IconButton icon="check" label="Save drawing" onClick={save} />
         </div>
       </header>
+      <div className="page-size-controls" aria-label="Drawing page size">
+        <label>W <input aria-label="Page width" type="number" min="240" max="4000" value={record.width} onChange={(e) => updateRecord({ width: Math.max(240, Math.min(4000, Number(e.target.value) || 240)) })} /></label>
+        <label>H <input aria-label="Page height" type="number" min="240" max="4000" value={record.height} onChange={(e) => updateRecord({ height: Math.max(240, Math.min(4000, Number(e.target.value) || 240)) })} /></label>
+      </div>
       <div className="canvas-options">
         <IconButton
           icon="image"

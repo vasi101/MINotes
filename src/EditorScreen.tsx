@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import Image from "@tiptap/extension-image";
+import Underline from "@tiptap/extension-underline";
 import Placeholder from "@tiptap/extension-placeholder";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
@@ -10,21 +10,31 @@ import { Icon, IconButton } from "./icons";
 import { useStore, dateLabel, type Note } from "./store";
 import { Sheet } from "./App";
 import { DrawingBlock } from "./DrawingBlock";
+import { PdfPageBlock } from "./PdfPageBlock";
+import { ResizableImage } from "./ResizableImage";
 export default function EditorScreen({
   note,
   onBack,
   onDraw,
   drawingPosition,
+  drawingId,
   focusAfterDrawing,
+  onOpenReader,
+  onNewNote,
 }: {
   note: Note;
   onBack: () => void;
-  onDraw: (position?: number) => void;
+  onDraw: (position?: number, drawingId?: string) => void;
   drawingPosition?: number;
+  drawingId?: string;
   focusAfterDrawing?: boolean;
+  onOpenReader?: (docId: string, pageNum: number) => void;
+  onNewNote?: () => void;
 }) {
-  const { updateNote, folders } = useStore();
-  const [panel, setPanel] = useState<"format" | "more" | "map" | null>(null);
+  const { updateNote, folders, readDocuments } = useStore();
+  const [panel, setPanel] = useState<"format" | "more" | "map" | "pdf" | null>(null);
+  const [selectedDocId, setSelectedDocId] = useState("");
+  const [selectedPage, setSelectedPage] = useState(1);
   const [, refresh] = useState(0);
   const [error, setError] = useState("");
   const file = useRef<HTMLInputElement>(null);
@@ -48,10 +58,12 @@ export default function EditorScreen({
   const editor = useEditor({
     extensions: [
       StarterKit,
+      Underline,
       TextStyle,
       FontSize,
       DrawingBlock.configure({ onEdit: onDraw }),
-      Image.configure({ allowBase64: true }),
+      PdfPageBlock.configure({ onOpenReader }),
+      ResizableImage.configure({ allowBase64: true }),
       Placeholder.configure({ placeholder: "Start typing" }),
       TaskList,
       TaskItem.configure({ nested: true }),
@@ -62,6 +74,33 @@ export default function EditorScreen({
     onTransaction: () => refresh((n) => n + 1),
     editorProps: {
       attributes: { "aria-label": "Note content" },
+      handleKeyDown: (_view, event) => {
+        const mod = event.ctrlKey || event.metaKey;
+        if (!mod) return false;
+        const key = event.key.toLowerCase();
+        const chain = editor?.chain().focus();
+        if (!chain) return false;
+
+        if (key === "b") chain.toggleBold().run();
+        else if (key === "i") chain.toggleItalic().run();
+        else if (key === "u") chain.toggleUnderline().run();
+        else if (key === "z" && event.shiftKey) chain.redo().run();
+        else if (key === "z") chain.undo().run();
+        else if (key === "y") chain.redo().run();
+        else if (key === "7" && event.shiftKey) chain.toggleOrderedList().run();
+        else if (key === "8" && event.shiftKey) chain.toggleBulletList().run();
+        else if (key === "1" && event.altKey) chain.toggleHeading({ level: 1 }).run();
+        else if (key === "2" && event.altKey) chain.toggleHeading({ level: 2 }).run();
+        else if (key === "3" && event.altKey) chain.toggleHeading({ level: 3 }).run();
+        else if (key === "s") {
+          save({ html: editor?.getHTML() || "", preview: editor?.getText() || "" });
+        } else if (key === "n") {
+          onNewNote?.();
+        } else return false;
+
+        event.preventDefault();
+        return true;
+      },
       handlePaste: (_view, event) => {
         const f = Array.from(event.clipboardData?.files || []).find((f) =>
           f.type.startsWith("image/"),
@@ -86,18 +125,49 @@ export default function EditorScreen({
     },
   });
   const drawingRestored = useRef(false);
+
+  /* Auto-insert pending PDF page if routed from Reader */
+  useEffect(() => {
+    if (!editor) return;
+    const raw = sessionStorage.getItem("pendingPdfInsert");
+    if (!raw) return;
+    sessionStorage.removeItem("pendingPdfInsert");
+    try {
+      const { docId, pageNum } = JSON.parse(raw);
+      if (docId) {
+        editor
+          .chain()
+          .focus()
+          .insertContent([
+            {
+              type: "pdfPage",
+              attrs: { documentId: docId, pageNum: pageNum || 1, width: 480 },
+            },
+            { type: "paragraph" },
+          ])
+          .run();
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [editor]);
+
   useEffect(() => {
     if (!editor || drawingRestored.current) return;
     drawingRestored.current = true;
-    if (!note.drawingPreview) return;
+    if (!note.drawingPreview && !note.drawings?.length) return;
     let position: number | undefined;
     editor.state.doc.descendants((node, pos) => {
-      if (node.type.name === "drawing" && node.attrs.noteId === note.id)
+      const matchesDrawing = drawingId === "legacy"
+        ? !node.attrs.drawingId
+        : node.attrs.drawingId === drawingId;
+      if (node.type.name === "drawing" && node.attrs.noteId === note.id && (!drawingId || matchesDrawing)) {
         position = pos;
+      }
     });
     if (
       position === undefined &&
-      (focusAfterDrawing || !note.drawingEmbedded)
+      (focusAfterDrawing || (!drawingId && !note.drawingEmbedded))
     ) {
       const insertion = Math.max(
         0,
@@ -109,11 +179,11 @@ export default function EditorScreen({
       editor
         .chain()
         .insertContentAt(insertion, [
-          { type: "drawing", attrs: { noteId: note.id } },
+          { type: "drawing", attrs: { noteId: note.id, drawingId: drawingId || null } },
           { type: "paragraph" },
         ])
         .run();
-      updateNote(note.id, { drawingEmbedded: true });
+      if (!drawingId) updateNote(note.id, { drawingEmbedded: true });
       if (focusAfterDrawing) editor.commands.focus();
     } else if (position !== undefined && focusAfterDrawing) {
       const after = position + editor.state.doc.nodeAt(position)!.nodeSize;
@@ -130,6 +200,8 @@ export default function EditorScreen({
     editor,
     note.id,
     note.drawingPreview,
+    note.drawings,
+    drawingId,
     note.drawingEmbedded,
     drawingPosition,
     focusAfterDrawing,
@@ -218,6 +290,17 @@ export default function EditorScreen({
           label="Insert image"
           onClick={() => file.current?.click()}
         />
+        {readDocuments.length > 0 && (
+          <IconButton
+            icon="read"
+            label="Insert PDF page"
+            onClick={() => {
+              setSelectedDocId(readDocuments[0]?.id || "");
+              setSelectedPage(1);
+              setPanel("pdf");
+            }}
+          />
+        )}
         <IconButton
           icon="draw"
           label="Draw"
@@ -410,6 +493,68 @@ export default function EditorScreen({
             />
             <button className="accent-button">Insert outline</button>
           </form>
+        </Sheet>
+      )}
+      {panel === "pdf" && (
+        <Sheet title="Insert PDF page" onClose={() => setPanel(null)}>
+          <label className="setting-row">
+            Document
+            <select
+              value={selectedDocId}
+              onChange={(e) => {
+                setSelectedDocId(e.target.value);
+                setSelectedPage(1);
+              }}
+            >
+              {readDocuments.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name} ({d.pages} pages)
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="setting-row">
+            Page number
+            <input
+              type="number"
+              min={1}
+              max={
+                readDocuments.find((d) => d.id === selectedDocId)?.pages || 1
+              }
+              value={selectedPage}
+              onChange={(e) =>
+                setSelectedPage(Math.max(1, Number(e.target.value)))
+              }
+              style={{ width: 80, textAlign: "right" }}
+            />
+          </label>
+          <div className="form-actions">
+            <button
+              className="accent-button"
+              onClick={() => {
+                if (selectedDocId) {
+                  editor
+                    ?.chain()
+                    .focus()
+                    .insertContent([
+                      {
+                        type: "pdfPage",
+                        attrs: {
+                          documentId: selectedDocId,
+                          pageNum: selectedPage,
+                          width: 480,
+                        },
+                      },
+                      { type: "paragraph" },
+                    ])
+                    .run();
+                  setPanel(null);
+                }
+              }}
+            >
+              Insert
+            </button>
+          </div>
         </Sheet>
       )}
     </div>
