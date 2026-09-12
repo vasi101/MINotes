@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {strokePath,flattenedStroke} from '../src/ink.ts';
+import {PDFDocument,rgb} from 'pdf-lib';
+const points=[0,0,20,40,50,50,80,30,100,0];
+const path=strokePath(points);
+assert(path.includes(' Q '));assert(path.endsWith('L 100 0'));
+assert(!strokePath(points,false).includes('Q'),'Explicit shapes retain their corners');
+const flat=flattenedStroke(points);
+assert.deepEqual(flat.slice(0,2),[0,0]);assert.deepEqual(flat.slice(-2),[100,0]);
+assert(flat.length>points.length);
+assert(flat.every((n,i)=>Number.isFinite(n)&&n>=0&&n<=(i%2?50:100)));
+assert.equal(strokePath([1,2,3,4]),'M 1 2 L 3 4');
+const pdf=await PDFDocument.create();pdf.addPage([200,200]).drawSvgPath(path,{x:20,y:150,borderColor:rgb(1,.5,0),borderWidth:3});
+assert.equal((await PDFDocument.load(await pdf.save())).getPageCount(),1);
+console.log('Smooth ink, sharp shape corners, curve hit-test geometry and PDF curve export checks passed.');

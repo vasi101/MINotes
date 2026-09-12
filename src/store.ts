@@ -18,7 +18,15 @@ export type DrawingImage = {
   height: number;
   rotation: number;
 };
-export type Drawing = { strokes: Stroke[]; images: DrawingImage[] };
+export type DrawingText = {
+  id: string;
+  text: string;
+  x: number;
+  y: number;
+  color: string;
+  fontSize: number;
+};
+export type Drawing = { strokes: Stroke[]; images: DrawingImage[]; texts?: DrawingText[] };
 export type DrawingPage = {
   id: string;
   drawing: Drawing;

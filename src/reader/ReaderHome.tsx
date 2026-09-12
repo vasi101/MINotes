@@ -666,39 +666,16 @@ export default function ReaderHome({ onOpen, folder, onSelectFolder }: Props) {
           tabIndex={0}
         >
           <div className="reader-empty-icon-wrap">
-            <Icon name="read" size={44} />
+            <Icon name="keyboard" size={44} />
           </div>
-          <h3>{currentPath ? `"${pathSegments[pathSegments.length - 1]}" is empty` : 'No PDF documents yet'}</h3>
-          <p>
-            {currentPath
-              ? 'Create subfolders or import PDF documents directly into this location.'
-              : 'Import single PDFs or choose "Import folder" to automatically inherit your entire directory structure.'}
-          </p>
-          <div className="reader-empty-actions" onClick={e => e.stopPropagation()}>
-            <button
-              type="button"
-              className="accent-button reader-empty-btn"
-              onClick={() => fileInput.current?.click()}
-            >
-              <Icon name="plus" size={18} />
-              Import PDF
-            </button>
-            <button
-              type="button"
-              className="import-pdf-button"
-              onClick={pickFolder}
-            >
-              <Icon name="folder" size={18} />
-              Import folder
-            </button>
-            <button
-              type="button"
-              className="new-folder-button"
-              onClick={openCreateFolder}
-            >
-              <Icon name="plus" size={18} />
-              New folder
-            </button>
+          <h3>Keyboard shortcuts</h3>
+          <div className="reader-shortcuts" onClick={e => e.stopPropagation()}>
+            <div><kbd>T</kbd><span>Open tools</span></div>
+            <div><kbd>F</kbd><span>Toggle fullscreen</span></div>
+            <div><kbd>H</kbd><span>Highlight</span></div>
+            <div><kbd>P</kbd><span>Pen</span></div>
+            <div><kbd>G</kbd><span>Move annotations</span></div>
+            <div><kbd>Ctrl</kbd><span>+ scroll to zoom</span></div>
           </div>
         </div>
       )}

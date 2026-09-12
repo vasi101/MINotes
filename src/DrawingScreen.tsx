@@ -1,9 +1,12 @@
-﻿import { useEffect, useRef, useState } from "react";
+import ShapePicker,{ShapeIcon} from './ShapePicker';
+import {correctShape,isShape,shapePoints} from './shapes';
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Stage,
   Layer,
   Line,
   Rect,
+  Text as KonvaText,
   Image as KonvaImage,
   Transformer,
 } from "react-konva";
@@ -16,6 +19,7 @@ import {
   type Drawing,
   type DrawingPage,
   type DrawingImage,
+  type DrawingText,
   type Stroke,
 } from "./store";
 const colors = [
@@ -61,7 +65,7 @@ function CanvasImage({
     img.onload = () => setImage(img);
     img.src = item.src;
   }, [item.src]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (selected && ref.current && transformer.current) {
       transformer.current.nodes([ref.current]);
       transformer.current.getLayer()?.batchDraw();
@@ -74,6 +78,7 @@ function CanvasImage({
         image={image}
         {...item}
         draggable={selected}
+        listening
         onClick={onSelect}
         onTap={onSelect}
         onDragEnd={(e) =>
@@ -97,13 +102,31 @@ function CanvasImage({
         <Transformer
           ref={transformer}
           flipEnabled={false}
-          keepRatio={true}
-          rotateEnabled={false}
+          keepRatio={false}
+          rotateEnabled={true}
+          enabledAnchors={["top-left", "top-center", "top-right", "middle-left", "middle-right", "bottom-left", "bottom-center", "bottom-right"]}
+          anchorSize={10}
+          borderStroke="#f2a900"
+          anchorStroke="#f2a900"
+          anchorFill="#fff"
           boundBoxFunc={(old, b) => (b.width < 15 || b.height < 15 ? old : b)}
         />
       )}
     </>
   );
+}
+function CanvasText({ item, selected, onSelect, onChange }: { item: DrawingText; selected: boolean; onSelect: () => void; onChange: (item: DrawingText) => void }) {
+  return <KonvaText
+    text={item.text}
+    x={item.x}
+    y={item.y}
+    fill={item.color}
+    fontSize={item.fontSize}
+    draggable={selected}
+    onClick={onSelect}
+    onTap={onSelect}
+    onDragEnd={(event) => onChange({ ...item, x: event.target.x(), y: event.target.y() })}
+  />;
 }
 export default function DrawingScreen({
   note,
@@ -129,6 +152,9 @@ export default function DrawingScreen({
   const drawing = history[index];
   const [active, setActive] = useState<Stroke | null>(null);
   const [tool, setTool] = useState("Pencil");
+  const [textDraft, setTextDraft] = useState<{ x: number; y: number; value: string } | null>(null);
+  const [autoShapes,setAutoShapes]=useState(true),[showShapes,setShowShapes]=useState(false);
+  const strokeStart=useRef<[number,number]>([0,0]);
   const [color, setColor] = useState("#359f08");
   const [colorFamily, setColorFamily] = useState(6);
   const activeShades =
@@ -160,6 +186,7 @@ export default function DrawingScreen({
   const [zoom, setZoom] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [error, setError] = useState("");
+  const panStart = useRef<{ x: number; y: number; position: { x: number; y: number } } | null>(null);
   const [eraserMode, setEraserMode] = useState<"stroke" | "pixel">("stroke");
   const [bounds, setBounds] = useState({ width: 430, height: 850 });
   const container = useRef<HTMLDivElement>(null);
@@ -190,9 +217,18 @@ export default function DrawingScreen({
       ? { x: (p.x - position.x) / zoom, y: (p.y - position.y) / zoom }
       : null;
   };
-  const finish = () => {
+  const finish = (event?: Konva.KonvaEventObject<PointerEvent>) => {
     if (activeRef.current) {
-      commit({ ...drawing, strokes: [...drawing.strokes, activeRef.current] });
+      let stroke=activeRef.current;
+      const end=event?point():null;
+      if(end){
+        if(isShape(stroke.tool))stroke={...stroke,points:shapePoints(stroke.tool,...strokeStart.current,end.x,end.y)};
+        else if(Math.hypot(end.x-stroke.points[stroke.points.length-2],end.y-stroke.points[stroke.points.length-1])*zoom>.2)stroke={...stroke,points:[...stroke.points,end.x,end.y]};
+      }
+      if(autoShapes&&['Pencil','Brush','Fountain pen'].includes(stroke.tool)){
+        const corrected=correctShape(stroke.points);if(corrected)stroke={...stroke,tool:corrected.kind,points:corrected.points};
+      }
+      commit({ ...drawing, strokes: [...drawing.strokes, stroke] });
       activeRef.current = null;
       setActive(null);
     }
@@ -223,6 +259,12 @@ export default function DrawingScreen({
         minY = Math.min(minY, image.y);
         maxX = Math.max(maxX, image.x + image.width);
         maxY = Math.max(maxY, image.y + image.height);
+      }
+      for (const text of drawing.texts || []) {
+        minX = Math.min(minX, text.x);
+        minY = Math.min(minY, text.y);
+        maxX = Math.max(maxX, text.x + Math.max(40, text.text.length * text.fontSize * 0.55));
+        maxY = Math.max(maxY, text.y + text.fontSize * 1.3);
       }
       if (!Number.isFinite(minX)) {
         minX = 0;
@@ -306,7 +348,30 @@ export default function DrawingScreen({
         scaleY={zoom}
         x={position.x}
         y={position.y}
-        draggable={tool === "Move" && !selected}
+        draggable={false}
+        onDblClick={() => {
+          const p = point();
+          if (p) {
+            setTextDraft({ x: p.x, y: p.y, value: "" });
+            setTool("Text");
+            setSelected("");
+          }
+        }}
+        onTouchStart={(event) => {
+          const touches = event.evt.touches;
+          if (tool === "Move" && touches.length === 2) {
+            event.evt.preventDefault();
+            panStart.current = { x: touches[0].clientX, y: touches[0].clientY, position: { ...position } };
+          }
+        }}
+        onTouchMove={(event) => {
+          const start = panStart.current;
+          const touches = event.evt.touches;
+          if (!start || touches.length !== 2) return;
+          event.evt.preventDefault();
+          setPosition({ x: start.position.x + touches[0].clientX - start.x, y: start.position.y + touches[0].clientY - start.y });
+        }}
+        onTouchEnd={() => { panStart.current = null; }}
         onDragEnd={(e) => {
           if (e.target === stage.current)
             setPosition({ x: e.target.x(), y: e.target.y() });
@@ -333,9 +398,15 @@ export default function DrawingScreen({
           if (e.evt.button > 0) return;
           const p = point();
           if (!p) return;
+          if (tool === "Text") {
+            setTextDraft({ x: p.x, y: p.y, value: "" });
+            return;
+          }
           (e.evt.target as Element)?.setPointerCapture(e.evt.pointerId);
           setPalette(false);
           setSelected("");
+          strokeStart.current=[p.x,p.y];
+          setShowShapes(false);
           const stroke: Stroke = {
             id: crypto.randomUUID(),
             points: [p.x, p.y, p.x + 0.01, p.y + 0.01],
@@ -358,19 +429,21 @@ export default function DrawingScreen({
           activeRef.current = stroke;
           setActive(stroke);
         }}
-        onPointerMove={() => {
-          const p = point();
-          if (activeRef.current && p) {
-            const next = {
-              ...activeRef.current,
-              points: [...activeRef.current.points, p.x, p.y],
-            };
-            activeRef.current = next;
-            setActive(next);
+        onPointerMove={(event) => {
+          if(!activeRef.current)return;
+          const native=event.evt,rect=stage.current?.container().getBoundingClientRect();if(!rect)return;
+          const samples=[...(native.getCoalescedEvents?.()||[]),native];
+          const points=[...activeRef.current.points];
+          for(const sample of samples){
+            const x=(sample.clientX-rect.left-position.x)/zoom,y=(sample.clientY-rect.top-position.y)/zoom;
+            if(isShape(activeRef.current.tool)){
+              points.splice(0,points.length,...shapePoints(activeRef.current.tool,...strokeStart.current,x,y));
+            }else if(Math.hypot(x-points[points.length-2],y-points[points.length-1])*zoom>.2)points.push(x,y);
           }
+          const next={...activeRef.current,points};activeRef.current=next;setActive(next);
         }}
         onPointerUp={finish}
-        onPointerCancel={finish}
+        onPointerCancel={()=>{activeRef.current=null;setActive(null)}}
       >
         <Layer listening={false}>
           <Rect
@@ -406,6 +479,15 @@ export default function DrawingScreen({
           ))}
         </Layer>
         <Layer>
+          {(drawing.texts || []).map((item) => (
+            <CanvasText
+              key={item.id}
+              item={item}
+              selected={item.id === selected}
+              onSelect={() => { if (tool === "Move") setSelected(item.id); }}
+              onChange={(next) => commit({ ...drawing, texts: (drawing.texts || []).map((text) => text.id === next.id ? next : text) })}
+            />
+          ))}
           {[...drawing.strokes, ...(active ? [active] : [])].map((s) => (
             <Line
               key={s.id}
@@ -413,9 +495,9 @@ export default function DrawingScreen({
               stroke={s.color}
               strokeWidth={s.width}
               opacity={s.opacity}
-              tension={0.35}
+              tension={isShape(s.tool) || s.tool === "Marker" ? 0 : 0.35}
               lineCap={s.tool === "Marker" ? "butt" : "round"}
-              lineJoin={s.tool === "Marker" ? "miter" : "round"}
+              lineJoin={s.tool === "Marker" ? "bevel" : "round"}
               globalCompositeOperation={
                 s.tool === "Eraser" ? "destination-out" : "source-over"
               }
@@ -466,7 +548,9 @@ export default function DrawingScreen({
         <label>W <input aria-label="Page width" type="number" min="240" max="4000" value={record.width} onChange={(e) => updateRecord({ width: Math.max(240, Math.min(4000, Number(e.target.value) || 240)) })} /></label>
         <label>H <input aria-label="Page height" type="number" min="240" max="4000" value={record.height} onChange={(e) => updateRecord({ height: Math.max(240, Math.min(4000, Number(e.target.value) || 240)) })} /></label>
       </div>
+      {showShapes&&<div className="drawing-shape-popup"><ShapePicker tool={tool} automatic={autoShapes} onAutomatic={setAutoShapes} onSelect={kind=>{setTool(kind);setShowShapes(false);setPalette(false)}}/></div>}
       <div className="canvas-options">
+        <button className="icon-button" aria-label="Shapes" title="Shapes" aria-expanded={showShapes} onClick={()=>{setShowShapes(value=>!value);setPalette(false)}}><ShapeIcon kind={isShape(tool)?tool:'rounded-rectangle'}/></button>
         <IconButton
           icon="image"
           label="Import drawing image"
@@ -481,6 +565,12 @@ export default function DrawingScreen({
             setPalette(false);
           }}
         />
+        <IconButton
+          icon="format"
+          label="Add text"
+          aria-pressed={tool === "Text"}
+          onClick={() => { setTool("Text"); setPalette(false); setShowShapes(false); setSelected(""); }}
+        />
         {selected && (
           <IconButton
             icon="trash"
@@ -489,6 +579,7 @@ export default function DrawingScreen({
               commit({
                 ...drawing,
                 images: drawing.images.filter((i) => i.id !== selected),
+                texts: (drawing.texts || []).filter((item) => item.id !== selected),
               });
               setSelected("");
             }}
@@ -500,6 +591,28 @@ export default function DrawingScreen({
           {error}
         </p>
       )}
+      {textDraft && <input
+        autoFocus
+        className="drawing-text-input"
+        aria-label="Drawing text"
+        value={textDraft.value}
+        onChange={(event) => setTextDraft({ ...textDraft, value: event.target.value })}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            if (textDraft.value.trim()) commit({ ...drawing, texts: [...(drawing.texts || []), { id: crypto.randomUUID(), text: textDraft.value.trim(), x: textDraft.x, y: textDraft.y, color, fontSize: Math.max(12, size * 4) }] });
+            setTextDraft(null);
+            setTool("Move");
+          }
+          if (event.key === "Escape") setTextDraft(null);
+        }}
+        onBlur={() => {
+          if (textDraft.value.trim()) commit({ ...drawing, texts: [...(drawing.texts || []), { id: crypto.randomUUID(), text: textDraft.value.trim(), x: textDraft.x, y: textDraft.y, color, fontSize: Math.max(12, size * 4) }] });
+          setTextDraft(null);
+          setTool("Move");
+        }}
+        style={{ left: textDraft.x * zoom + position.x, top: textDraft.y * zoom + position.y, color }}
+      />}
       {palette ? (
         <div className="color-picker">
           <div className="shades">

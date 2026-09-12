@@ -159,8 +159,8 @@ export default function App() {
                 key={readerDocId}
                 docId={readerDocId}
                 onBack={() => setReaderDocId(null)}
-                onInsertIntoNote={(docId, pageNum) => {
-                  sessionStorage.setItem('pendingPdfInsert', JSON.stringify({ docId, pageNum }));
+                onInsertIntoNote={(docId, pageNum, marks) => {
+                  sessionStorage.setItem('pendingPdfInsert', JSON.stringify({ docId, pageNum, marks }));
                   setTab('notes');
                   setFolderHome(false);
                 }}
@@ -207,25 +207,11 @@ export default function App() {
                           : "Tasks"}
                   </h1>
                   <div className="top-actions">
-                    {tab === "notes" && (
-                      <IconButton
-                        icon="folder"
-                        label="Folders"
-                        onClick={() => {
-                          setFolderHome(true);
-                          setTrash(false);
-                        }}
-                      />
-                    )}
-                    {tab === "read" && !readFolderHome && (
-                      <IconButton
-                        icon="folder"
-                        label="Document folders"
-                        onClick={() => {
-                          setReadFolderHome(true);
-                        }}
-                      />
-                    )}
+                    <IconButton
+                      icon={theme === "dark" ? "sun" : "moon"}
+                      label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+                      onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                    />
                     <IconButton
                       icon="settings"
                       label="Settings"

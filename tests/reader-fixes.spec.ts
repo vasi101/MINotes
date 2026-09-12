@@ -77,3 +77,21 @@ test('missing thumbnails regenerate from saved PDFs and survive reload without l
   await page.screenshot({path:'artifacts/reader-thumbnail-fixed.png'});
   await page.reload();await page.getByRole('button',{name:'Read',exact:true}).click();await expect(image).toBeVisible();
 });
+
+test('fullscreen reading hides chrome and restores annotation controls',async({page})=>{
+  await page.goto('/');await page.getByRole('button',{name:'Read',exact:true}).click();
+  await page.getByTestId('pdf-file-input').setInputFiles({name:'Fullscreen.pdf',mimeType:'application/pdf',buffer:Buffer.from(await pdfBytes(3))});
+  await page.getByRole('button',{name:'Open Fullscreen',exact:true}).click();
+  await expect(page.locator('[data-page-number="1"]')).toHaveAttribute('data-rendered','true');
+  await page.getByRole('button',{name:'Read fullscreen',exact:true}).click();
+  await expect(page.locator('.pdf-viewer')).toHaveClass(/reader-fullscreen/);
+  expect(await page.evaluate(()=>document.fullscreenElement?.classList.contains('pdf-viewer'))).toBe(true);
+  await expect(page.getByRole('toolbar',{name:'Reader tools',exact:true})).toBeHidden();
+  await page.getByRole('button',{name:'Show tools',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Highlight',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Hide tools',exact:true}).click();
+  await page.getByRole('button',{name:'Exit fullscreen',exact:true}).click();
+  await expect(page.locator('.pdf-viewer')).not.toHaveClass(/reader-fullscreen/);
+  await expect(page.getByRole('toolbar',{name:'Reader tools',exact:true})).toBeVisible();
+  expect(await page.evaluate(()=>document.fullscreenElement)).toBeNull();
+});

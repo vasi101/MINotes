@@ -17,7 +17,7 @@
         "height": 900,
         "maximized": true,
         "zoomHotkeysEnabled": true,
-        "minWidth": 360,
+        "minWidth": 768,
         "minHeight": 600,
         "decorations": false,
         "backgroundColor": "#000000"

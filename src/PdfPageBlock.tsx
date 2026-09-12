@@ -9,9 +9,40 @@ import { loadPdf } from './reader/pdf';
 import { getPdfFile } from './reader/storage';
 import { useStore } from './store';
 import { Icon } from './icons';
+import type { PdfMark } from './reader/types';
+
+function drawMarks(ctx: CanvasRenderingContext2D, marks: PdfMark[], width: number, height: number) {
+  for (const mark of marks) {
+    const color = mark.color || '#f2a900';
+    if (mark.kind === 'text' && mark.text && mark.points.length >= 2) {
+      ctx.fillStyle = color;
+      ctx.font = `${Math.max(6, mark.width * width)}px sans-serif`;
+      ctx.textBaseline = 'top';
+      ctx.fillText(mark.text, mark.points[0] * width, mark.points[1] * height);
+      continue;
+    }
+    if (mark.rects.length) {
+      ctx.globalAlpha = mark.kind === 'highlight' ? 0.3 : 0.5;
+      ctx.fillStyle = color;
+      for (const rect of mark.rects) ctx.fillRect(rect.x * width, rect.y * height, rect.width * width, rect.height * height);
+    }
+    if (mark.points.length >= 4) {
+      ctx.globalAlpha = mark.kind === 'marker' ? 0.32 : 1;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = Math.max(1, mark.width * width);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(mark.points[0] * width, mark.points[1] * height);
+      for (let index = 2; index < mark.points.length; index += 2) ctx.lineTo(mark.points[index] * width, mark.points[index + 1] * height);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+}
 
 function PdfPageView({ node, updateAttributes, selected, extension }: NodeViewProps) {
-  const { documentId, pageNum, width = 480 } = node.attrs;
+  const { documentId, pageNum, width = 480, marks = [] } = node.attrs as { documentId: string; pageNum: number; width: number; marks: PdfMark[] };
   const readDocs = useStore(s => s.readDocuments);
   const docMeta = readDocs.find(d => d.id === documentId);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -57,6 +88,7 @@ function PdfPageView({ node, updateAttributes, selected, extension }: NodeViewPr
 
         renderTask = page.render({ canvas, canvasContext: ctx, viewport: vp });
         await renderTask.promise;
+        drawMarks(ctx, marks, vp.width, vp.height);
         await task.destroy();
         if (!cancelled) setLoading(false);
       } catch (err) {
@@ -71,7 +103,7 @@ function PdfPageView({ node, updateAttributes, selected, extension }: NodeViewPr
       cancelled = true;
       renderTask?.cancel();
     };
-  }, [documentId, pageNum, width]);
+  }, [documentId, pageNum, width, marks]);
 
   /* ── resize handle ── */
   const onResizeStart = useCallback((e: React.PointerEvent) => {
@@ -167,6 +199,12 @@ export const PdfPageBlock = Node.create<{
         default: 480,
         parseHTML: el => Number(el.getAttribute('data-pdf-width')) || 480,
       },
+      marks: {
+        default: [],
+        parseHTML: el => {
+          try { return JSON.parse(el.getAttribute('data-pdf-marks') || '[]'); } catch { return []; }
+        },
+      },
     };
   },
 
@@ -185,6 +223,7 @@ export const PdfPageBlock = Node.create<{
         'data-pdf-doc': node.attrs.documentId,
         'data-pdf-page': node.attrs.pageNum,
         'data-pdf-width': node.attrs.width,
+        'data-pdf-marks': JSON.stringify(node.attrs.marks || []),
       },
     ];
   },

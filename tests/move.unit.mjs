@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {registerHooks} from 'node:module';
+registerHooks({resolve(specifier,context,next){if(specifier.startsWith('.')&&!/\.[a-z]+$/i.test(specifier)){try{return next(specifier+'.ts',context)}catch{}}return next(specifier,context)}});
+const {markBounds,translateMark,hitsMark}=await import('../src/reader/geometry.ts');
+const mark={id:'shape',page:1,kind:'ink',shape:'rounded-rectangle',color:'#000000',width:.01,rects:[],points:[.2,.3,.5,.3,.5,.6,.2,.6,.2,.3]};
+const moved=translateMark(mark,.1,-.2);
+assert.equal(moved.id,mark.id);assert.equal(moved.shape,mark.shape);assert.equal(moved.width,mark.width);
+assert(Math.abs(markBounds(moved).x-.3)<1e-9);assert(Math.abs(markBounds(moved).y-.1)<1e-9);
+assert.deepEqual(mark.points,[.2,.3,.5,.3,.5,.6,.2,.6,.2,.3],'Drag preview must not mutate saved history');
+const clipped=markBounds(translateMark(mark,5,-5));assert(Math.abs(clipped.x+clipped.width-1)<1e-9);assert.equal(clipped.y,0);
+assert(hitsMark(moved,300,100,1000,1000));assert(!hitsMark(moved,200,600,1000,1000));
+assert.deepEqual(translateMark(moved,-.1,.2).points.map(n=>Math.round(n*1e6)),mark.points.map(n=>Math.round(n*1e6)));
+console.log('Drawing movement, page bounds, hit testing and immutable undo geometry checks passed.');

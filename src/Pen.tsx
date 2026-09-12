@@ -1,3 +1,4 @@
+import {useId} from "react";
 export const penNames = [
   "Pencil",
   "Brush",
@@ -6,7 +7,7 @@ export const penNames = [
   "Eraser",
 ] as const;
 export default function Pen({ kind, color }: { kind: string; color: string }) {
-  const id = kind.replaceAll(" ", "");
+  const id = useId();
   return (
     <svg viewBox="0 0 60 190" aria-hidden="true">
       <defs>
@@ -36,7 +37,7 @@ export default function Pen({ kind, color }: { kind: string; color: string }) {
         </>
       ) : kind === "Brush" ? (
         <>
-          <path d="M22 75Q15 45 30 4q15 42 8 71" fill="url(#Brush-tip)" />
+          <path d="M22 75Q15 45 30 4q15 42 8 71" fill={`url(#${id}-tip)`} />
           <path d="M16 190V75h28v115" fill={`url(#${id}-body)`} />
           <path d="M17 75h26m-26 34h26" stroke="#ccc" strokeWidth="2" />
           <circle cx="30" cy="96" r="2.3" fill="#40b7f4" />
@@ -44,7 +45,7 @@ export default function Pen({ kind, color }: { kind: string; color: string }) {
         </>
       ) : kind === "Marker" ? (
         <>
-          <path d="M17 34V17L42 6v28" fill="url(#Marker-tip)" stroke={color} />
+          <path d="M17 34V17L42 6v28" fill={`url(#${id}-tip)`} stroke={color} />
           <path d="m15 33-3 40h35l-4-40" fill={`url(#${id}-body)`} />
           <path d="M7 190V76h46v114" fill={`url(#${id}-body)`} />
           <path d="M10 75h40" stroke="#b5b5b5" strokeWidth="3" />

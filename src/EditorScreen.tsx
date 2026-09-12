@@ -5,13 +5,22 @@ import Underline from "@tiptap/extension-underline";
 import Placeholder from "@tiptap/extension-placeholder";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
+import { Table, TableCell, TableHeader, TableRow } from "@tiptap/extension-table";
 import { TextStyle, FontSize } from "@tiptap/extension-text-style";
+import Color from "@tiptap/extension-color";
 import { Icon, IconButton } from "./icons";
 import { useStore, dateLabel, type Note } from "./store";
 import { Sheet } from "./App";
 import { DrawingBlock } from "./DrawingBlock";
 import { PdfPageBlock } from "./PdfPageBlock";
 import { ResizableImage } from "./ResizableImage";
+
+const fontColors = [
+  "#111827", "#4b5563", "#9ca3af", "#ffffff",
+  "#b42318", "#e11d48", "#f97316", "#d97706",
+  "#15803d", "#0f766e", "#0284c7", "#2563eb",
+  "#7c3aed", "#c026d3", "#92400e", "#f2a900",
+];
 export default function EditorScreen({
   note,
   onBack,
@@ -32,7 +41,7 @@ export default function EditorScreen({
   onNewNote?: () => void;
 }) {
   const { updateNote, folders, readDocuments } = useStore();
-  const [panel, setPanel] = useState<"format" | "more" | "map" | "pdf" | null>(null);
+  const [panel, setPanel] = useState<"format" | "more" | "map" | "pdf" | "table" | "textColor" | null>(null);
   const [selectedDocId, setSelectedDocId] = useState("");
   const [selectedPage, setSelectedPage] = useState(1);
   const [, refresh] = useState(0);
@@ -61,12 +70,17 @@ export default function EditorScreen({
       Underline,
       TextStyle,
       FontSize,
+      Color.configure({ types: ["textStyle"] }),
       DrawingBlock.configure({ onEdit: onDraw }),
       PdfPageBlock.configure({ onOpenReader }),
       ResizableImage.configure({ allowBase64: true }),
       Placeholder.configure({ placeholder: "Start typing" }),
       TaskList,
       TaskItem.configure({ nested: true }),
+      Table.configure({ resizable: true, handleWidth: 8, cellMinWidth: 60 }),
+      TableRow,
+      TableHeader,
+      TableCell,
     ],
     content: note.html,
     onUpdate: ({ editor }) =>
@@ -81,7 +95,9 @@ export default function EditorScreen({
         const chain = editor?.chain().focus();
         if (!chain) return false;
 
-        if (key === "b") chain.toggleBold().run();
+        if (key === "+" || key === "=") changeFontSize(2);
+        else if (key === "-") changeFontSize(-2);
+        else if (key === "b") chain.toggleBold().run();
         else if (key === "i") chain.toggleItalic().run();
         else if (key === "u") chain.toggleUnderline().run();
         else if (key === "z" && event.shiftKey) chain.redo().run();
@@ -133,7 +149,7 @@ export default function EditorScreen({
     if (!raw) return;
     sessionStorage.removeItem("pendingPdfInsert");
     try {
-      const { docId, pageNum } = JSON.parse(raw);
+      const { docId, pageNum, marks } = JSON.parse(raw);
       if (docId) {
         editor
           .chain()
@@ -141,7 +157,7 @@ export default function EditorScreen({
           .insertContent([
             {
               type: "pdfPage",
-              attrs: { documentId: docId, pageNum: pageNum || 1, width: 480 },
+              attrs: { documentId: docId, pageNum: pageNum || 1, width: 480, marks: Array.isArray(marks) ? marks : [] },
             },
             { type: "paragraph" },
           ])
@@ -314,28 +330,20 @@ export default function EditorScreen({
           onClick={() => editor?.chain().focus().toggleTaskList().run()}
         />
         <IconButton
+          icon="table"
+          label="Insert table"
+          onClick={() => setPanel("table")}
+        />
+        <IconButton
+          icon="palette"
+          label="Font color"
+          onClick={() => setPanel("textColor")}
+        />
+        <IconButton
           icon="format"
           label="Formatting"
           onClick={() => setPanel("format")}
         />
-        <button
-          aria-label="Increase text size"
-          type="button"
-          disabled={!editor || fontSize >= 35}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => changeFontSize(2)}
-        >
-          A<sup>+</sup>
-        </button>
-        <button
-          aria-label="Decrease text size"
-          type="button"
-          disabled={!editor || fontSize <= 13}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => changeFontSize(-2)}
-        >
-          A<sup>−</sup>
-        </button>
         <button
           aria-label="Bold"
           aria-pressed={editor?.isActive("bold")}
@@ -493,6 +501,55 @@ export default function EditorScreen({
             />
             <button className="accent-button">Insert outline</button>
           </form>
+        </Sheet>
+      )}
+      {panel === "table" && (
+        <Sheet title="Insert table" onClose={() => setPanel(null)}>
+          <form onSubmit={(event) => {
+            event.preventDefault();
+            const data = new FormData(event.currentTarget);
+            const rows = Math.max(1, Math.min(30, Number(data.get("rows")) || 2));
+            const cols = Math.max(1, Math.min(12, Number(data.get("columns")) || 2));
+            editor?.chain().focus().insertTable({ rows, cols, withHeaderRow: true }).run();
+            setPanel(null);
+          }}>
+            <label className="setting-row">Rows<input name="rows" type="number" min="1" max="30" defaultValue="3" /></label>
+            <label className="setting-row">Columns<input name="columns" type="number" min="1" max="12" defaultValue="3" /></label>
+            <div className="form-actions"><button className="accent-button" type="submit">Insert table</button></div>
+          </form>
+        </Sheet>
+      )}
+      {panel === "textColor" && (
+        <Sheet title="Font color" onClose={() => setPanel(null)}>
+          <div className="font-color-palette" role="group" aria-label="Font colors">
+            {fontColors.map((value) => (
+              <button
+                key={value}
+                type="button"
+                aria-label={`Font color ${value}`}
+                title={value}
+                style={{ background: value }}
+                onClick={() => {
+                  editor?.chain().focus().setColor(value).run();
+                  setPanel(null);
+                }}
+              />
+            ))}
+          </div>
+          <label className="custom-font-color">
+            Custom color
+            <input
+              type="color"
+              aria-label="Custom font color"
+              onChange={(event) => {
+                editor?.chain().focus().setColor(event.target.value).run();
+                setPanel(null);
+              }}
+            />
+          </label>
+          <button className="text-button" onClick={() => { editor?.chain().focus().unsetColor().run(); setPanel(null); }}>
+            Remove font color
+          </button>
         </Sheet>
       )}
       {panel === "pdf" && (
