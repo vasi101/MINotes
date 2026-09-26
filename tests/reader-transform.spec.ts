@@ -1,0 +1,37 @@
+import { test, expect } from '@playwright/test';
+import { PDFDocument } from 'pdf-lib';
+
+test('page jump and text resize/rotation survive undo and reload', async ({ page }) => {
+  const pdf = await PDFDocument.create(); for(let i=0;i<3;i++) pdf.addPage([500,700]);
+  await page.goto('/'); await page.getByRole('button',{name:'Read',exact:true}).click();
+  await page.getByTestId('pdf-file-input').setInputFiles({name:'Transform.pdf',mimeType:'application/pdf',buffer:Buffer.from(await pdf.save())});
+  await page.getByRole('button',{name:'Open Transform',exact:true}).click();
+  const jump=page.getByRole('spinbutton',{name:'Jump to page'});
+  await jump.fill('3'); await page.getByRole('button',{name:'Go',exact:true}).click();
+  await expect(page.getByText('Page 3 of 3',{exact:true})).toBeVisible();
+  await jump.fill('1'); await jump.press('Enter');
+  await expect(page.getByText('Page 1 of 3',{exact:true})).toBeVisible();
+  const layer=page.locator('.pdf-text-layer').first();
+  await layer.dblclick({position:{x:100,y:160}});
+  const input=page.getByRole('textbox',{name:'Text annotation'});await input.fill('Resize me');await input.press('Enter');
+  await page.keyboard.press('g');
+  const text=page.locator('.pdf-annotation-layer text').first();
+  const box=(await text.boundingBox())!;
+  await page.mouse.click(box.x+box.width/2,box.y+box.height/2);
+  const resize=page.locator('[data-transform="se"]'); await expect(resize).toBeVisible();
+  const handle=(await resize.boundingBox())!;
+  await page.mouse.move(handle.x+handle.width/2,handle.y+handle.height/2);await page.mouse.down();await page.mouse.move(handle.x+handle.width/2+45,handle.y+handle.height/2+22,{steps:8});await page.mouse.up();
+  expect((await text.boundingBox())!.width).toBeGreaterThan(box.width+20);
+  const matrix=page.locator('.pdf-annotation-layer > g[transform]').first();
+  const resized=await matrix.getAttribute('transform');
+  const rotate=(await page.locator('[data-transform="rotate"]').boundingBox())!;
+  await page.mouse.move(rotate.x+rotate.width/2,rotate.y+rotate.height/2);await page.mouse.down();await page.mouse.move(rotate.x+65,rotate.y+40,{steps:8});await page.mouse.up();
+  await expect(matrix).not.toHaveAttribute('transform',resized!);
+  await page.keyboard.press('Control+z');await expect(matrix).toHaveAttribute('transform',resized!);
+  await page.keyboard.press('Control+y');await expect(matrix).not.toHaveAttribute('transform',resized!);
+  const transformed=await matrix.getAttribute('transform');
+  await page.getByRole('button',{name:'Back to library',exact:true}).click();
+  await page.reload();await page.getByRole('button',{name:'Read',exact:true}).click();
+  await page.getByRole('button',{name:'Open Transform',exact:true}).click();
+  await expect(page.locator('.pdf-annotation-layer > g[transform]').first()).toHaveAttribute('transform',transformed!);
+});

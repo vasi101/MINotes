@@ -1,3 +1,4 @@
+import RemoveFolderSheet from './RemoveFolderSheet';
 import { useState } from "react";
 import { useStore } from "../store";
 import { Icon, IconButton } from "../icons";
@@ -33,7 +34,6 @@ export default function ReadFolderHome({
     readFolderColors,
     addReadFolder,
     customizeReadFolder,
-    deleteReadFolder,
   } = useStore();
 
   const [editing, setEditing] = useState<{
@@ -41,6 +41,7 @@ export default function ReadFolderHome({
     name: string;
     color: string;
   } | null>(null);
+  const [removeFolder, setRemoveFolder] = useState<string | null>(null);
   const [error, setError] = useState("");
 
   const folderColor = (name: string, index: number) =>
@@ -53,6 +54,7 @@ export default function ReadFolderHome({
 
   return (
     <section className="folder-home" aria-label="Your document folders">
+      {removeFolder && <RemoveFolderSheet path={removeFolder} onClose={() => setRemoveFolder(null)} onRemoved={() => setRemoveFolder(null)}/>}
       <div className="folder-home-heading">
         <div>
           <h2>Document folders</h2>
@@ -98,6 +100,7 @@ export default function ReadFolderHome({
                   {docCount} document{docCount !== 1 ? "s" : ""}
                 </span>
               </button>
+              <IconButton icon="trash" label={`Remove folder ${name}`} className="reader-folder-remove" onClick={() => setRemoveFolder(name)}/>
               <IconButton
                 icon="more"
                 label={`Customize ${name}`}
@@ -173,7 +176,7 @@ export default function ReadFolderHome({
                   type="button"
                   className="text-button danger"
                   onClick={() => {
-                    deleteReadFolder(editing.original!);
+                    setRemoveFolder(editing.original!);
                     setEditing(null);
                   }}
                 >

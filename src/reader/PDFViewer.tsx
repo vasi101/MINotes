@@ -10,7 +10,6 @@ import { Icon, IconButton } from '../icons';
 import { useStore } from '../store';
 import type { PdfMark, ReaderTool } from './types';
 import { Sheet } from '../App';
-import Pen from '../Pen';
 import RingSettings from './RingSettings';
 import ShapePicker,{ShapeIcon} from '../ShapePicker';
 import {isShape} from '../shapes';
@@ -33,6 +32,7 @@ export default function PDFViewer({docId,onBack,onInsertIntoNote}:Props) {
   const scaleRef=useRef(scale);scaleRef.current=scale;
   const scroller=useRef<HTMLDivElement>(null),pageRefs=useRef<(HTMLDivElement|null)[]>([]);
   const [active,setActive]=useState(new Set([1,2]));
+  const [jumpPage,setJumpPage]=useState('');
   const [current,setCurrent]=useState(doc?.lastPage||1);
   const initialPage=useRef(doc?.lastPage||1),restored=useRef(false);
   const [selectedMarks,setSelectedMarks]=useState<string[]>([]);
@@ -41,7 +41,7 @@ export default function PDFViewer({docId,onBack,onInsertIntoNote}:Props) {
   const selectMarks=useCallback((ids:string[],mode:'replace'|'add'|'toggle'='replace')=>{
     setSelectedMarks(previous=>mode==='replace'?ids:mode==='add'?[...new Set([...previous,...ids])]:[...previous.filter(id=>!ids.includes(id)),...ids.filter(id=>!previous.includes(id))]);
   },[]);
-  const [tool,setTool]=useState<ReaderTool>('text'),[color,setColor]=useState(highlightColors[3]);
+  const [tool,setTool]=useState<ReaderTool>('highlight'),[color,setColor]=useState(highlightColors[3]);
   const [penWidth,setPenWidth]=useState(3),[markerWidth,setMarkerWidth]=useState(18);
   const [palette,setPalette]=useState(false),[actions,setActions]=useState(false),[extract,setExtract]=useState(false);
   const [range,setRange]=useState(''),[exportError,setExportError]=useState(''),[exporting,setExporting]=useState(false);
@@ -85,8 +85,8 @@ export default function PDFViewer({docId,onBack,onInsertIntoNote}:Props) {
   useLayoutEffect(()=>{if(!pdf||restored.current)return;restored.current=true;const target=pageRefs.current[Math.min(initialPage.current,pdf.numPages)-1];if(target&&scroller.current)scroller.current.scrollTop=target.offsetTop},[pdf]);
   useEffect(()=>{
     const root=scroller.current;if(!root||!pdf)return;let frame=0;
-    const measure=()=>{frame=0;const bounds=root.getBoundingClientRect(),near=new Set<number>();let page=1;
-      pageRefs.current.forEach((element,index)=>{if(!element)return;const rect=element.getBoundingClientRect();if(rect.bottom>=bounds.top-350&&rect.top<=bounds.bottom+350)near.add(index+1);if(rect.top<=bounds.top+Math.min(120,bounds.height*.25))page=index+1});
+    const measure=()=>{frame=0;const bounds=root.getBoundingClientRect(),near=new Set<number>();let page=1,mostVisible=-1;
+      pageRefs.current.forEach((element,index)=>{if(!element)return;const rect=element.getBoundingClientRect();if(rect.bottom>=bounds.top-350&&rect.top<=bounds.bottom+350)near.add(index+1);const visible=Math.max(0,Math.min(rect.bottom,bounds.bottom)-Math.max(rect.top,bounds.top));if(visible>mostVisible){mostVisible=visible;page=index+1}});
       setActive(prev=>prev.size===near.size&&[...near].every(p=>prev.has(p))?prev:near);setCurrent(page);
     };
     const schedule=()=>{if(!frame)frame=requestAnimationFrame(measure)};measure();root.addEventListener('scroll',schedule,{passive:true});
@@ -175,6 +175,11 @@ export default function PDFViewer({docId,onBack,onInsertIntoNote}:Props) {
   const count=pdf?.numPages||doc.pages;
   return <div ref={element} className={`pdf-viewer reader-corner-layout ${fullscreen?'reader-fullscreen':''}`}>
     <div className="reader-back-corner"><IconButton icon="back" label="Back to library" onClick={back}/></div>
+    <form className="reader-page-jump" aria-label="Page navigation" onSubmit={event=>{event.preventDefault();const value=Number(jumpPage);if(Number.isInteger(value)&&value>=1&&value<=count){go(value);setJumpPage('')}}}>
+      <span aria-live="polite">Page {current} of {count}</span>
+      <input aria-label="Jump to page" type="number" min={1} max={count} step={1} placeholder="#" value={jumpPage} onChange={event=>setJumpPage(event.target.value)}/>
+      <button type="submit" disabled={!pdf||!jumpPage}>Go</button>
+    </form>
     {fullscreenError&&<p className="reader-error" role="alert">{fullscreenError}</p>}
     {actions&&<div className="reader-actions-menu" role="dialog" aria-label="Reading controls">
       <div className="reader-ring-navigation">
@@ -211,7 +216,7 @@ export default function PDFViewer({docId,onBack,onInsertIntoNote}:Props) {
           const label={text:'Text',highlight:'Highlight',ink:'Pen',erase:'Eraser',move:'Move',shapes:'Shapes'}[value];
           const angle=index*Math.PI/12;
           return <button key={value} className={`reader-ring-tool ${(tool===value||value==='shapes'&&isShape(tool))?'active':''}`} style={{right:Math.cos(angle)*238,bottom:Math.sin(angle)*238}} aria-label={label} title={value==='shapes'||!TOOL_KEYS[value]?label:`${label} (${TOOL_KEYS[value]})`} aria-keyshortcuts={value==='shapes'||!TOOL_KEYS[value]?undefined:TOOL_KEYS[value]} aria-pressed={tool===value||value==='shapes'&&isShape(tool)} onClick={()=>{if(value==='shapes')setShowShapes(true);else{setTool(value);setShowShapes(false)}if(!ringLocked)setShowControls(false);setPalette(false)}}>
-            <span className="reader-ring-art">{value==='move'?<Icon name="move" size={24}/>:value==='shapes'?<ShapeIcon kind={isShape(tool)?tool:'rounded-rectangle'}/>:value==='text'?<Icon name="select" size={23}/>:<Pen kind={value==='highlight'?'Marker':value==='ink'?'Fountain pen':'Eraser'} color={color}/>}</span>
+            <span className="reader-ring-art">{value==='move'?<Icon name="move" size={24}/>:value==='shapes'?<ShapeIcon kind={isShape(tool)?tool:'rounded-rectangle'}/>:value==='text'?<Icon name="select" size={23}/>:<Icon name={value==='highlight'?'highlighter':value==='ink'?'nib':'eraser'} size={28}/>}</span>
             <span>{label}</span>
           </button>;
         })}

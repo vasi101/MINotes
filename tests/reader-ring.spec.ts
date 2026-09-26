@@ -42,7 +42,7 @@ test('selected annotations can change width in move mode',async({page})=>{
   const svg=page.locator('.pdf-annotation-layer').first();
   const box=await svg.boundingBox();
   await page.mouse.move(box!.x+120,box!.y+160);await page.mouse.down();await page.mouse.move(box!.x+240,box!.y+260,{steps:18});await page.mouse.up();
-  const mark=page.locator('.pdf-annotation-layer path').first();
+  const mark=page.locator('.pdf-highlight-layer path, .pdf-annotation-layer path').first();
   await expect(mark).toBeVisible();
   const target=await mark.boundingBox();
   await page.mouse.click(target!.x + target!.width / 2, target!.y + target!.height / 2);
@@ -53,4 +53,45 @@ test('selected annotations can change width in move mode',async({page})=>{
   await slider.focus();
   await page.keyboard.press('ArrowRight');
   await expect.poll(async()=>Number(await slider.getAttribute('aria-valuenow'))).toBeGreaterThan(before);
+});
+
+
+test('text annotation requires a double click', async ({ page }) => {
+  const pdf = await PDFDocument.create(); pdf.addPage([500, 700]);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Read', exact: true }).click();
+  await page.getByTestId('pdf-file-input').setInputFiles({ name: 'Text.pdf', mimeType: 'application/pdf', buffer: Buffer.from(await pdf.save()) });
+  await page.getByRole('button', { name: 'Open Text', exact: true }).click();
+  await expect(page.locator('[data-page-number="1"]')).toHaveAttribute('data-rendered', 'true');
+  await page.getByRole('button', { name: 'Open tools', exact: true }).click();
+  await page.getByRole('button', { name: 'Text', exact: true }).click();
+  const layer = page.locator('.pdf-text-layer').first();
+  await layer.click({ position: { x: 90, y: 100 } });
+  await expect(page.getByRole('textbox', { name: 'Text annotation' })).toHaveCount(0);
+  await layer.dblclick({ position: { x: 90, y: 100 } });
+  const input = page.getByRole('textbox', { name: 'Text annotation' });
+  await expect(input).toBeVisible();
+  await input.fill('Double-click note');
+  await input.press('Enter');
+  await expect(input).toHaveCount(0);
+  await expect(page.locator('.pdf-annotation-layer')).toContainText('Double-click note');
+});
+
+
+test('default highlighter opens text on a double tap without requiring a tool switch', async ({ page }) => {
+  const pdf = await PDFDocument.create(); pdf.addPage([500, 700]);
+  await page.goto('/'); await page.getByRole('button', { name: 'Read', exact: true }).click();
+  await page.getByTestId('pdf-file-input').setInputFiles({ name: 'Tap.pdf', mimeType: 'application/pdf', buffer: Buffer.from(await pdf.save()) });
+  await page.getByRole('button', { name: 'Open Tap', exact: true }).click();
+  await expect(page.locator('[data-page-number="1"]')).toHaveAttribute('data-rendered', 'true');
+  const layer = page.locator('.pdf-text-layer').first();
+  await layer.dblclick({ position: { x: 80, y: 90 } });
+  const input = page.getByRole('textbox', { name: 'Text annotation' });
+  await expect(input).toBeVisible(); await input.press('Escape');
+  const box = (await layer.boundingBox())!;
+  const touch = { pointerType: 'touch', pointerId: 1, clientX: box.x + 80, clientY: box.y + 90 };
+  await layer.dispatchEvent('pointerdown', touch); await layer.dispatchEvent('pointerup', touch);
+  await expect(input).toHaveCount(0);
+  await layer.dispatchEvent('pointerdown', touch); await layer.dispatchEvent('pointerup', touch);
+  await expect(input).toBeVisible();
 });

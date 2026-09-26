@@ -1,5 +1,9 @@
 import type { ButtonHTMLAttributes } from "react";
 const paths: Record<string, string> = {
+  nib: "m15 3 6 6-9 10-9 2 2-9 10-9zM12 6l6 6M3 21l7-7m3-3a2 2 0 1 1-4 0 2 2 0 0 1 4 0",
+  highlighter: "m14 3 7 7-8 8-7-7 8-8zM6 11l-3 5 5 5 5-3M3 21h7M12 5l7 7",
+
+  profile: "M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0M3 22v-3a9 9 0 0 1 18 0v3",
   read: 'M12 5Q7 1 2 4v16q5-3 10 0 5-3 10 0V4q-5-3-10 1v15',
   table: 'M3 4h18v16H3zM3 10h18M3 15h18M9 4v16M16 4v16',
   palette: 'M12 3a9 9 0 1 0 0 18h1.5a2.5 2.5 0 0 0 0-5H12a2 2 0 0 1 0-4h3.5A5.5 5.5 0 0 0 12 3zM7 10h.01M9 6.5h.01M15 6.5h.01M18 10h.01',
@@ -23,6 +27,7 @@ const paths: Record<string, string> = {
   share: "M14 3h8v8m0-8L11 14M9 4H5q-3 0-3 3v12q0 3 3 3h13q3 0 3-3v-5",
   more: "M12 3h.01M12 12h.01M12 21h.01",
   plus: "M12 2v20M2 12h20",
+  refresh: "M20 6v6h-6M20 12a8 8 0 1 0-2.34 5.66",
   repeat: "M3 9a9 9 0 0 1 16-3l2 3m0-6v6h-6M21 15a9 9 0 0 1-16 3l-2-3m0 6v-6h6",
   focus: "M3 10V3h7m4 18h7v-7M12 12h.01",
   trash: "M3 6h18M9 6V2h6v4M5 6l1 16h12l1-16M10 10v8m4-8v8",

@@ -1,12 +1,15 @@
 import { useRef, useState, useMemo, useEffect } from 'react';
 import { useStore } from '../store';
 import { loadPdf } from './pdf';
-import { savePdfFile, deletePdfFile, getDirectoryHandles, saveDirectoryHandle } from './storage';
+import { savePdfFile, deletePdfFile, getDirectoryHandles } from './storage';
 import { Icon, IconButton } from '../icons';
 import { FolderArtwork } from '../FolderHome';
 import { Sheet } from '../App';
 import type { ReadDocument } from './types';
 import DocumentThumbnail from './DocumentThumbnail';
+import RemoveFolderSheet from './RemoveFolderSheet';
+import GoogleDriveSheet from './GoogleDriveSheet';
+import { driveSources, driveStatus, syncDriveSource } from './googleDrive';
 
 
 interface Props {
@@ -44,7 +47,6 @@ export default function ReaderHome({ onOpen, folder, onSelectFolder }: Props) {
     updateReadDocument,
     addReadFolder,
     customizeReadFolder,
-    deleteReadFolder,
   } = useStore();
 
   const fileInput = useRef<HTMLInputElement>(null);
@@ -59,72 +61,95 @@ export default function ReaderHome({ onOpen, folder, onSelectFolder }: Props) {
   const [confirmDeleteDoc, setConfirmDeleteDoc] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
 
+  const [driveOpen, setDriveOpen] = useState(false);
+  const [driveAction, setDriveAction] = useState('');
+  const [removeFolder, setRemoveFolder] = useState<string | null>(null);
+  const [savedRoots, setSavedRoots] = useState<string[]>([]);
+  useEffect(() => {
+    if (driveOpen) return;
+    let cancelled = false;
+    void getDirectoryHandles().then(sources => {
+      if (cancelled) return;
+      setSavedRoots(sources.flatMap(source => {
+        const handle = source.handle as { name?: string } | undefined;
+        const name = source.directories?.[0] || handle?.name;
+        if (!name) return [];
+        const legacyBase = source.id.slice(0, source.id.lastIndexOf(':'));
+        const basePath = source.basePath ?? (legacyBase === 'root' ? '' : legacyBase);
+        return [[basePath, name.replaceAll('/', '\u2215')].filter(Boolean).join('/')];
+      }));
+    }).catch(() => { if (!cancelled) setSavedRoots([]); });
+    return () => { cancelled = true; };
+  }, [driveOpen, folder, importing, removeFolder]);
+  const connectedRoots = useMemo(() => {
+    const roots = new Set(savedRoots);
+    for (const doc of readDocuments) {
+      if (!doc.folder || (!doc.sourceId && !doc.sourcePath)) continue;
+      const parts = doc.sourcePath?.split('/') || [];
+      const relativeFolder = parts.slice(0, -1).join('/');
+      if (parts.length > 1 && doc.folder.endsWith(relativeFolder)) {
+        roots.add(doc.folder.slice(0, -relativeFolder.length) + parts[0]);
+      } else roots.add(doc.folder);
+    }
+    return [...roots];
+  }, [savedRoots, readDocuments]);
+  const [headerMenu, setHeaderMenu] = useState<'add' | 'more' | null>(null);
+  const headerActions = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!headerMenu) return;
+    const outside = (event: PointerEvent) => {
+      if (!headerActions.current?.contains(event.target as Node)) setHeaderMenu(null);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        headerActions.current?.querySelector<HTMLButtonElement>('[aria-expanded="true"]')?.focus();
+        setHeaderMenu(null);
+        event.stopPropagation();
+      }
+    };
+    document.addEventListener('pointerdown', outside);
+    document.addEventListener('keydown', escape, true);
+    return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape, true); };
+  }, [headerMenu]);
+  useEffect(() => setHeaderMenu(null), [folder]);
+  const driveBusy = useRef(false);
+  const syncInProgress = useRef(false);
   type SourceDirectory = {
     name: string;
     values: () => AsyncIterable<{ kind: 'directory' | 'file'; name: string; values?: () => AsyncIterable<unknown>; getFile?: () => Promise<File> }>;
-    queryPermission?: (options: { mode: 'read' }) => Promise<'granted' | 'denied' | 'prompt'>;
   };
-  type SourceFile = { file: File; path: string };
-  const collectSourceFiles = async (directory: SourceDirectory, path: string): Promise<SourceFile[]> => {
-    const files: SourceFile[] = [];
-    for await (const entry of directory.values()) {
-      const entryPath = `${path}/${entry.name}`;
-      if (entry.kind === 'directory' && entry.values) files.push(...await collectSourceFiles(entry as SourceDirectory, entryPath));
-      else if (entry.kind === 'file' && entry.getFile && /\.pdf$/i.test(entry.name)) files.push({ file: await entry.getFile(), path: entryPath });
-    }
-    return files;
-  };
-
-  const syncSource = async (sourceId: string, handle: SourceDirectory) => {
-    try {
-      if (handle.queryPermission && await handle.queryPermission({ mode: 'read' }) !== 'granted') return;
-      const sourceFiles = await collectSourceFiles(handle, handle.name);
-      for (const { file, path } of sourceFiles) {
-        const current = useStore.getState().readDocuments.find(doc => doc.sourceId === sourceId && doc.sourcePath === path);
-        if (current && current.sourceModified === file.lastModified && current.size === file.size) continue;
-        const bytes = new Uint8Array(await file.arrayBuffer());
-        const task = loadPdf(bytes);
-        const pdfDoc = await task.promise;
-        const pages = pdfDoc.numPages;
-        await task.destroy();
-        const assignedFolder = [folder === 'All' ? '' : folder, path.split('/').slice(0, -1).join('/')].filter(Boolean).join('/') || undefined;
-        if (current) {
-          await savePdfFile(current.id, bytes);
-          updateReadDocument(current.id, { name: file.name.replace(/\.pdf$/i, ''), pages, size: bytes.length, sourceModified: file.lastModified, thumbnail: undefined, folder: assignedFolder });
-        } else {
-          const id = crypto.randomUUID();
-          await savePdfFile(id, bytes);
-          addReadDocument({ id, name: file.name.replace(/\.pdf$/i, ''), pages, size: bytes.length, addedAt: new Date().toISOString(), lastPage: 1, zoom: 0, marks: [], folder: assignedFolder, sourceId, sourcePath: path, sourceModified: file.lastModified });
-        }
-      }
-    } catch {
-      // A removed folder or revoked permission is skipped until the user imports it again.
-    }
-  };
-
-  const refreshSources = async () => {
-    if (syncing) return;
+  const refreshSources = async (interactive = true) => {
+    if (syncInProgress.current || driveBusy.current || importing) return;
+    syncInProgress.current = true;
     setSyncing(true);
+    if (interactive) { setError(''); setDriveAction(''); }
     try {
-      const sources = await getDirectoryHandles().catch(() => []);
-      for (const source of sources) await syncSource(source.id, source.handle as SourceDirectory);
+      const status = await driveStatus();
+      const sources = await driveSources();
+      if (!status.connected || !sources.length) {
+        if (interactive) {
+          setError(sources.length
+            ? 'Your Drive folders are still linked. Sign in again to refresh them; your downloaded PDFs and annotations are saved.'
+            : 'This imported folder has no Google Drive link. Choose a Drive folder to enable refresh.');
+          setDriveAction(sources.length ? 'Sign in to refresh' : 'Choose Drive folder');
+        }
+        return;
+      }
+      const failures: string[] = [];
+      for (const source of sources) {
+        try { await syncDriveSource(source); }
+        catch (error) { failures.push(error instanceof Error ? error.message : String(error)); }
+      }
+      if (failures.length) setError(failures.join(' '));
+      else { setError(''); setDriveAction(''); }
+    } catch (error) {
+      if (interactive) setError(error instanceof Error ? error.message : String(error));
     } finally {
+      syncInProgress.current = false;
       setSyncing(false);
     }
   };
 
-  useEffect(() => {
-    let stopped = false;
-    const refresh = async () => {
-      const sources = await getDirectoryHandles().catch(() => []);
-      for (const source of sources) {
-        if (!stopped) await syncSource(source.id, source.handle as SourceDirectory);
-      }
-    };
-    void refresh();
-    const timer = window.setInterval(() => void refresh(), 5000);
-    return () => { stopped = true; window.clearInterval(timer); };
-  }, []);
 
   // Batch selection
   const [selectMode, setSelectMode] = useState(false);
@@ -217,7 +242,7 @@ export default function ReaderHome({ onOpen, folder, onSelectFolder }: Props) {
   };
 
   /* ── Batch / Folder import ── */
-  const importFiles = async (files: File[], isFolderImport: boolean = false, directories: string[] = [], source?: { id: string; handle: SourceDirectory }) => {
+  const importFiles = async (files: File[], isFolderImport: boolean = false, directories: string[] = [], importPath = currentPath) => {
     // Preserve the tree before parsing PDFs, including non-PDF and empty folders.
     if (isFolderImport) {
       const paths = new Set(directories);
@@ -226,8 +251,8 @@ export default function ReaderHome({ onOpen, folder, onSelectFolder }: Props) {
         for (let i = 1; i <= parts.length; i++) paths.add(parts.slice(0, i).join('/'));
       }
       for (const path of paths) {
-        const fullPath = currentPath ? `${currentPath}/${path}` : path;
-        if (!useStore.getState().readFolders.includes(fullPath)) addReadFolder(fullPath, colors[paths.size % colors.length]);
+        const fullPath = importPath ? `${importPath}/${path}` : path;
+        if (!useStore.getState().readFolders.includes(fullPath)) addReadFolder(fullPath, colors[(useStore.getState().readFolders.length * 4) % colors.length]);
       }
     }
     const pdfFiles = files.filter(f => f.name.toLowerCase().endsWith('.pdf'));
@@ -247,15 +272,13 @@ export default function ReaderHome({ onOpen, folder, onSelectFolder }: Props) {
 
       try {
         const relativeFolder = isFolderImport ? file.webkitRelativePath.split('/').slice(0, -1).join('/') : '';
-        const assignedFolder = [currentPath, relativeFolder].filter(Boolean).join('/') || undefined;
+        const assignedFolder = [importPath, relativeFolder].filter(Boolean).join('/') || undefined;
         const name = file.name.replace(/\.pdf$/i, '');
         const sourcePath = isFolderImport ? file.webkitRelativePath : undefined;
-        const existing = useStore.getState().readDocuments.find(doc => source
-          ? doc.sourceId === source.id && doc.sourcePath === sourcePath
-          : doc.folder === assignedFolder && doc.name === name && doc.size === file.size);
-        if (existing) { successCount++; continue; }
+        const existing = useStore.getState().readDocuments.find(doc => !doc.sourceId && doc.folder === assignedFolder && doc.name === name);
+
         const bytes = new Uint8Array(await file.arrayBuffer());
-        const id = crypto.randomUUID();
+        const id = existing?.id || crypto.randomUUID();
 
         // Page count & thumbnail
         const task = loadPdf(bytes);
@@ -271,16 +294,16 @@ export default function ReaderHome({ onOpen, folder, onSelectFolder }: Props) {
           pages,
           size: bytes.length,
           addedAt: new Date().toISOString(),
-          lastPage: 1,
-          zoom: 0,
-          marks: [],
+          lastPage: Math.min(existing?.lastPage || 1, pages),
+          zoom: existing?.zoom || 0,
+          marks: existing?.marks || [],
           folder: assignedFolder,
-          sourceId: source?.id,
+          sourceId: undefined,
           sourcePath,
-          sourceModified: source ? file.lastModified : undefined,
+          sourceModified: undefined,
         };
 
-        try { addReadDocument(doc); } catch (error) {
+        try { if (existing) updateReadDocument(id, { ...doc, addedAt: existing.addedAt }); else addReadDocument(doc); } catch (error) {
           if (!(error instanceof DOMException) || error.name !== 'QuotaExceededError') throw error;
           // Cached previews must never prevent the document metadata from being saved.
           useStore.setState(state => ({ readDocuments: state.readDocuments.map(item => ({ ...item, thumbnail: undefined })) }));
@@ -307,9 +330,7 @@ export default function ReaderHome({ onOpen, folder, onSelectFolder }: Props) {
     const picker = (window as unknown as { showDirectoryPicker?: () => Promise<SourceDirectory> }).showDirectoryPicker;
     if (!picker) { folderInput.current?.click(); return; }
     try {
-      const root = await picker() as unknown as SourceDirectory;
-      const sourceId = `${currentPath || 'root'}:${root.name}`;
-      try { await saveDirectoryHandle(sourceId, root); } catch { /* Some test/webview handles cannot be cloned. */ }
+      const root = await picker();
       const files: File[] = [], directories: string[] = [];
       const visit = async (directory: SourceDirectory, path: string) => {
         directories.push(path);
@@ -323,17 +344,14 @@ export default function ReaderHome({ onOpen, folder, onSelectFolder }: Props) {
         }
       };
       await visit(root, root.name);
-      await importFiles(files, true, directories, { id: sourceId, handle: root });
+      await importFiles(files, true, directories);
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return;
-      setError(error instanceof Error ? error.message : 'Unable to read folder.');
+      setError(error instanceof Error ? error.message : String(error));
     }
   };
-
   const onFolderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.length) {
-      importFiles(Array.from(e.target.files), true);
-    }
+    if (e.target.files?.length) void importFiles(Array.from(e.target.files), true);
     e.target.value = '';
   };
 
@@ -399,7 +417,7 @@ export default function ReaderHome({ onOpen, folder, onSelectFolder }: Props) {
   };
 
   const handleDeleteFolder = (fullPath: string) => {
-    deleteReadFolder(fullPath);
+    setRemoveFolder(fullPath);
     setEditingFolder(null);
   };
 
@@ -411,8 +429,14 @@ export default function ReaderHome({ onOpen, folder, onSelectFolder }: Props) {
       onDragLeave={() => setDragging(false)}
       onDrop={onDrop}
     >
+      {removeFolder && <RemoveFolderSheet path={removeFolder} onClose={() => setRemoveFolder(null)} onRemoved={() => {
+        if (currentPath === removeFolder || currentPath.startsWith(`${removeFolder}/`)) onSelectFolder(removeFolder.split('/').slice(0, -1).join('/') || 'All');
+        setRemoveFolder(null);
+      }}/>}
+      {driveOpen && <GoogleDriveSheet basePath={currentPath} onClose={() => setDriveOpen(false)} onBusy={busy => { driveBusy.current = busy; }}/>}
       {/* Explorer Breadcrumb & Actions Bar */}
       <div className="reader-explorer-bar">
+        <div className="reader-location-heading">
         {currentPath ? (
           <nav className="reader-breadcrumb-nav" aria-label="Folder path">
             <button
@@ -445,64 +469,38 @@ export default function ReaderHome({ onOpen, folder, onSelectFolder }: Props) {
           <div className="folder-home-heading" style={{ margin: 0 }}>
             <div className="reader-folder-title">
               <h2>Document folders</h2>
-              <button
-                className={`reader-refresh-button ${syncing ? 'is-syncing' : ''}`}
-                onClick={() => void refreshSources()}
-                disabled={syncing}
-                aria-label="Refresh imported folders"
-                title="Refresh imported folders"
-              >
-                ⟳
-              </button>
+
             </div>
           </div>
         )}
 
-        <div className="reader-header-actions">
-          {visibleDocs.length > 0 && (
-            <button
-              className={`new-folder-button ${selectMode ? 'active' : ''}`}
-              onClick={() => {
-                if (selectMode) exitSelectMode();
-                else setSelectMode(true);
-              }}
-              aria-label={selectMode ? 'Cancel selection' : 'Select documents'}
-              title={selectMode ? 'Cancel selection' : 'Select multiple documents to delete'}
-            >
-              {selectMode ? 'Cancel' : 'Select'}
-            </button>
-          )}
-          <button
-            className="new-folder-button"
-            onClick={openCreateFolder}
-            aria-label="New folder"
-            title="Create a new folder in this location"
-          >
-            <Icon name="plus" size={16} />
-            New folder
+        {connectedRoots.some(root => !currentPath || root === currentPath || currentPath.startsWith(`${root}/`) || root.startsWith(`${currentPath}/`)) && (
+          <button className={`reader-refresh-button ${syncing ? 'is-syncing' : ''}`} aria-label="Refresh connected folders" title="Refresh connected folders" disabled={syncing || importing} onClick={() => void refreshSources()}>
+            <Icon name="repeat" size={22}/>
           </button>
+        )}
+        </div>
 
-          <button
-            className="import-pdf-button"
-            onClick={() => fileInput.current?.click()}
-            disabled={importing}
-            aria-label="Import PDF"
-            title="Import single or multiple PDF files into this folder"
-          >
-            <Icon name="plus" size={16} />
-            {importing ? (importStatus || 'Importing…') : 'Import PDF'}
+        <div className="reader-header-actions" ref={headerActions}>
+          {importing && <span className="reader-import-status" role="status">{importStatus || 'Importing...'}</span>}
+          {selectMode && <button className="text-button" onClick={exitSelectMode}>Cancel selection</button>}
+          <button className="new-folder-button reader-add-button" aria-label="Add to library" aria-expanded={headerMenu === 'add'} aria-controls="reader-add-menu" disabled={importing || syncing} onClick={() => setHeaderMenu(headerMenu === 'add' ? null : 'add')}>
+            <Icon name="plus" size={18}/> Add
           </button>
-
-          <button
-            className="import-pdf-button import-folder-btn"
-            onClick={pickFolder}
-            disabled={importing}
-            aria-label="Import folder"
-            title="Import an entire folder tree from your computer"
-          >
-            <Icon name="folder" size={16} />
-            Import folder
+          <button className="icon-button reader-more-button" aria-label="More library actions" aria-expanded={headerMenu === 'more'} aria-controls="reader-more-menu" onClick={() => setHeaderMenu(headerMenu === 'more' ? null : 'more')}>
+            <Icon name="more" size={20}/>
           </button>
+          {headerMenu === 'add' && <div className="reader-header-menu" id="reader-add-menu" role="group" aria-label="Add to library" onClick={() => setHeaderMenu(null)}>
+            <button onClick={() => setDriveOpen(true)}><Icon name="folder" size={18}/>Google Drive</button>
+            <button onClick={() => fileInput.current?.click()}><Icon name="read" size={18}/>Import PDF</button>
+            <button onClick={() => void pickFolder()}><Icon name="folder" size={18}/>Import folder</button>
+            <button onClick={openCreateFolder}><Icon name="plus" size={18}/>New folder</button>
+          </div>}
+          {headerMenu === 'more' && <div className="reader-header-menu" id="reader-more-menu" role="group" aria-label="More library actions" onClick={() => setHeaderMenu(null)}>
+            {currentPath && <button disabled={importing} onClick={() => setRemoveFolder(currentPath)}><Icon name="trash" size={18}/>Remove this folder</button>}
+            <button disabled={!visibleDocs.length} onClick={() => { if (selectMode) exitSelectMode(); else setSelectMode(true); }}><Icon name="checkbox" size={18}/>{selectMode ? 'Cancel selection' : 'Select documents'}</button>
+            <button disabled={syncing || importing} onClick={() => setDriveOpen(true)}><Icon name="folder" size={18}/>Google Drive</button>
+          </div>}
 
           <input
             ref={fileInput}
@@ -543,7 +541,7 @@ export default function ReaderHome({ onOpen, folder, onSelectFolder }: Props) {
         <p className="reader-shelf-empty">{shelf === 'Recent' ? 'No reading history yet' : shelf === 'Favourite' ? 'No favourites yet' : 'Nothing in To Read yet'}</p>
       )}
 
-      {error && <p className="reader-error" role="alert">{error}</p>}
+      {error && <p className="reader-error" role="alert">{error}{driveAction && <button className="text-button" onClick={() => setDriveOpen(true)}>{driveAction}</button>}</p>}
 
       {/* ── Subfolders Grid (Xiaomi Artwork) ── */}
       {shelf === 'Library' && directSubfolders.length > 0 && (
@@ -572,6 +570,7 @@ export default function ReaderHome({ onOpen, folder, onSelectFolder }: Props) {
                       {docCount} {docCount === 1 ? 'document' : 'documents'}
                     </span>
                   </button>
+                  <IconButton icon="trash" label={`Remove folder ${subName}`} className="reader-folder-remove" disabled={importing} onClick={() => setRemoveFolder(subFullPath)}/>
                   <IconButton
                     icon="more"
                     label={`Options for ${subName}`}
@@ -614,7 +613,7 @@ export default function ReaderHome({ onOpen, folder, onSelectFolder }: Props) {
                   data-testid={`pdf-card-${doc.id}`}
                 >
                   <div className="pdf-thumb">
-                    <DocumentThumbnail id={doc.id} name={doc.name} legacy={doc.thumbnail}/>
+                    <DocumentThumbnail key={`${doc.id}:${doc.sourceModified || 0}`} id={doc.id} name={doc.name} legacy={doc.thumbnail}/>
                     {selectMode && (
                       <div className={`pdf-select-check ${selectedIds.has(doc.id) ? 'checked' : ''}`}>
                         {selectedIds.has(doc.id) && <Icon name="check" size={14} />}

@@ -5,3 +5,7 @@ test-results/
 playwright-report/
 *.tsbuildinfo
 public/pdfjs/
+.env
+.env.local
+.env.*.local
+.minotes-auth/

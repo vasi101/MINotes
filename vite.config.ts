@@ -1,7 +1,15 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
+import { createGoogleAuth } from "./server/google-auth.mjs";
 import react from "@vitejs/plugin-react";
+import { pdfDecoderAssets } from "./scripts/pdf-assets-dev";
 export default defineConfig({
-  plugins: [react()],
+  plugins: [pdfDecoderAssets(), react(), {
+    name: 'minotes-google-session',
+    configureServer(server) {
+      const env = { ...loadEnv(server.config.mode, process.cwd(), ''), ...process.env };
+      server.middlewares.use(createGoogleAuth(env));
+    },
+  }],
   build: {
     rollupOptions: {
       output: {
@@ -20,6 +28,7 @@ export default defineConfig({
   server: {
     port: 1420,
     strictPort: true,
+    headers: { "Cross-Origin-Opener-Policy": "same-origin-allow-popups", "Referrer-Policy": "no-referrer-when-downgrade" },
     watch: { ignored: ["**/src-tauri/**"] },
   },
   clearScreen: false,

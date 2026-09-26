@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { spawn } from "node:child_process";
+if (existsSync(".env.local")) process.loadEnvFile(".env.local");
 const cargoBin = join(
   process.env.CARGO_HOME || join(homedir(), ".cargo"),
   "bin",

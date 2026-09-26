@@ -1,3 +1,4 @@
+import { inverse, transformPoint } from './transform';
 import {flattenedStroke} from '../ink';
 import type { PdfMark, PdfRect } from './types';
 export const clamp = (value:number,min:number,max:number)=>Math.max(min,Math.min(max,value));
@@ -37,6 +38,7 @@ export function getSelectionRects(layer:HTMLElement,selection:Selection){
 }
 
 export function hitsMark(mark:PdfMark,x:number,y:number,width:number,height:number,radius=7){
+  if(mark.transform){const point=transformPoint(inverse(mark.transform),x/width,y/height);return hitsMark({...mark,transform:undefined},point[0]*width,point[1]*height,width,height,radius)}
   if(mark.rects.some(r=>x>=r.x*width-radius&&x<=(r.x+r.width)*width+radius&&y>=r.y*height-radius&&y<=(r.y+r.height)*height+radius))return true;
   const raw=mark.points.map((n,i)=>n*(i%2?height:width));
   const points=mark.shape?raw:flattenedStroke(raw);
@@ -49,6 +51,12 @@ export function hitsMark(mark:PdfMark,x:number,y:number,width:number,height:numb
 }
 
 export function markBounds(mark:PdfMark):PdfRect|null{
+  if(mark.transform){
+    const box=markBounds({...mark,transform:undefined});if(!box)return null;
+    const corners=[[box.x,box.y],[box.x+box.width,box.y],[box.x,box.y+box.height],[box.x+box.width,box.y+box.height]].map(([x,y])=>transformPoint(mark.transform!,x,y));
+    const xs=corners.map(p=>p[0]),ys=corners.map(p=>p[1]);
+    return {x:Math.min(...xs),y:Math.min(...ys),width:Math.max(...xs)-Math.min(...xs),height:Math.max(...ys)-Math.min(...ys)};
+  }
   const xs=mark.points.filter((_,i)=>i%2===0),ys=mark.points.filter((_,i)=>i%2===1);
   for(const rect of mark.rects){xs.push(rect.x,rect.x+rect.width);ys.push(rect.y,rect.y+rect.height)}
   if(!xs.length)return null;
@@ -60,6 +68,7 @@ export function markBounds(mark:PdfMark):PdfRect|null{
 export function translateMark(mark:PdfMark,dx:number,dy:number):PdfMark{
   const bounds=markBounds(mark);if(!bounds)return mark;
   const x=clamp(dx,-bounds.x,1-bounds.x-bounds.width),y=clamp(dy,-bounds.y,1-bounds.y-bounds.height);
+  if(mark.transform)return {...mark,transform:[...mark.transform.slice(0,4),mark.transform[4]+x,mark.transform[5]+y] as typeof mark.transform};
   return {...mark,points:mark.points.map((n,i)=>n+(i%2?y:x)),rects:mark.rects.map(rect=>({...rect,x:rect.x+x,y:rect.y+y}))};
 }
 
@@ -69,5 +78,5 @@ export function translateMarks(marks:PdfMark[],dx:number,dy:number):PdfMark[]{
   const left=Math.min(...bounds.map(b=>b.x)),right=Math.max(...bounds.map(b=>b.x+b.width));
   const top=Math.min(...bounds.map(b=>b.y)),bottom=Math.max(...bounds.map(b=>b.y+b.height));
   const x=clamp(dx,-left,1-right),y=clamp(dy,-top,1-bottom);
-  return marks.map(mark=>({...mark,points:mark.points.map((n,i)=>n+(i%2?y:x)),rects:mark.rects.map(rect=>({...rect,x:rect.x+x,y:rect.y+y}))}));
+  return marks.map(mark=>mark.transform?{...mark,transform:[...mark.transform.slice(0,4),mark.transform[4]+x,mark.transform[5]+y] as typeof mark.transform}:({...mark,points:mark.points.map((n,i)=>n+(i%2?y:x)),rects:mark.rects.map(rect=>({...rect,x:rect.x+x,y:rect.y+y}))}));
 }

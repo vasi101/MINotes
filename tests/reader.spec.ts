@@ -43,6 +43,7 @@ test("Read section: library empty state, import PDF, scroll through pages, jump 
   // 3. Generate sample multi-page PDF & import
   const pdfBytes = await createSamplePdf(4);
   const fileChooserPromise = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Add to library", exact: true }).click();
   await page.locator(".reader-header-actions").getByRole("button", { name: "Import PDF" }).click();
   const fileChooser = await fileChooserPromise;
   await fileChooser.setFiles({
@@ -115,6 +116,7 @@ test("Read section: Explorer-like folder structure with Xiaomi Notes styling and
   await expect(page.getByRole("heading", { name: "Read", exact: true })).toBeVisible();
 
   // 1. Create a new folder "Mathematics" at Root
+  await page.getByRole("button", { name: "Add to library", exact: true }).click();
   await page.getByRole("button", { name: "New folder" }).first().click();
   await page.getByLabel("Folder label").fill("Mathematics");
   await page.getByRole("button", { name: "Create folder" }).click();
@@ -144,6 +146,7 @@ test("Read section: Explorer-like folder structure with Xiaomi Notes styling and
 
   try {
     const fileChooserPromise = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Add to library", exact: true }).click();
     await page.getByRole("button", { name: "Import folder" }).first().click();
     const fileChooser = await fileChooserPromise;
     await fileChooser.setFiles(calculusDir);

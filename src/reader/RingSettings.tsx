@@ -20,15 +20,17 @@ export default function RingSettings({color,onColor,width,onWidth,marker}:{color
       const angle=index/(highlightColors.length-1)*Math.PI/2;
       return <button key={value} className="reader-outer-color" aria-label={`Ink color ${value}`} title={value} aria-pressed={color===value} style={{right:14+Math.cos(angle)*310,bottom:14+Math.sin(angle)*310,background:value}} onClick={()=>onColor(value)}/>;
     })}</div>
+    <div className="reader-ring-caption"><span>{marker ? "Marker width" : "Stroke width"}</span><strong>{width}<small> px</small></strong><div className="reader-stroke-preview" aria-hidden="true"><span style={{width:Math.max(3,width),height:Math.max(3,width),background:color}}/></div></div>
     <svg ref={svg} className="reader-thickness-ring" viewBox="0 0 420 420">
       <g role="slider" tabIndex={0} aria-label={marker?'Marker thickness':'Pen thickness'} aria-valuemin={1} aria-valuemax={30} aria-valuenow={width} aria-valuetext={`${width} pixels`} className="reader-thickness-slider"
         onKeyDown={keyboard} onPointerDown={event=>{event.preventDefault();event.currentTarget.setPointerCapture(event.pointerId);update(event)}} onPointerMove={event=>{if(event.currentTarget.hasPointerCapture(event.pointerId))update(event)}} onPointerUp={event=>{if(event.currentTarget.hasPointerCapture(event.pointerId)){update(event);event.currentTarget.releasePointerCapture(event.pointerId)}}}>
-        <path d="M32 392 A360 360 0 0 1 392 32" fill="none" stroke="white" strokeWidth="12" strokeLinecap="round"/>
-        <path d="M32 392 A360 360 0 0 1 392 32" fill="none" stroke="#545454" strokeWidth="3" strokeLinecap="round"/>
+        <path d="M32 392 A360 360 0 0 1 392 32" fill="none" stroke="#dce2e9" strokeWidth="8" strokeLinecap="round"/>
+        <path d="M32 392 A360 360 0 0 1 392 32" fill="none" stroke="#ffffff55" strokeWidth="2" strokeLinecap="round"/>
+        <path d="M32 392 A360 360 0 0 1 392 32" pathLength="100" fill="none" stroke={color} strokeWidth="4" strokeDasharray={`${(width-1)/29*100} 100`} strokeLinecap="round"/>
         <path d="M32 392 A360 360 0 0 1 392 32" fill="none" stroke="transparent" strokeWidth="28"/>
-        <circle cx={x} cy={y} r="16" fill="white" stroke="#262626" strokeWidth="2"/>
-        <circle cx={x} cy={y} r={Math.max(1.5,width*.4)} fill={color}/>
-        <text x={x+24} y={y+5} fill="#222" stroke="white" strokeWidth="4" paintOrder="stroke" fontSize="13" fontWeight="600" pointerEvents="none">{width}</text>
+        <circle cx={x} cy={y} r={16+width/5} fill="white" stroke="#262626" strokeWidth="2"/>
+        <circle cx={x} cy={y} r={Math.max(1.5,width/2)} fill={color}/>
+
       </g>
     </svg>
   </>;

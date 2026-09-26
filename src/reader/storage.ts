@@ -21,6 +21,7 @@ export async function savePdfFile(id: string, bytes: Uint8Array) {
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction('files', 'readwrite');
     tx.objectStore('files').put(bytes, id);
+    tx.objectStore('files').delete(`thumbnail:${id}`);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
     tx.onabort = () => reject(tx.error);
@@ -73,11 +74,11 @@ export async function savePdfThumbnail(id: string, blob: Blob) {
   });
 }
 
-export async function saveDirectoryHandle(id: string, handle: unknown) {
+export async function saveDirectoryHandle(id: string, handle: unknown, basePath = '', directories: string[] = []) {
   const db = await openHandleDatabase();
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction('handles', 'readwrite');
-    tx.objectStore('directory-handles').put(handle, id);
+    tx.objectStore('handles').put({ handle, basePath, directories }, id);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
@@ -85,15 +86,41 @@ export async function saveDirectoryHandle(id: string, handle: unknown) {
 
 export async function getDirectoryHandles() {
   const db = await openHandleDatabase();
-  return new Promise<Array<{ id: string; handle: unknown }>>((resolve, reject) => {
+  return new Promise<Array<{ id: string; handle: unknown; basePath?: string; directories?: string[] }>>((resolve, reject) => {
     const request = db.transaction('handles').objectStore('handles').openCursor();
-    const handles: Array<{ id: string; handle: FileSystemDirectoryHandle }> = [];
+    const handles: Array<{ id: string; handle: unknown; basePath?: string; directories?: string[] }> = [];
     request.onsuccess = () => {
       const cursor = request.result;
       if (!cursor) return resolve(handles);
-      handles.push({ id: String(cursor.key), handle: cursor.value });
+      handles.push(cursor.value.handle
+        ? { id: String(cursor.key), ...cursor.value }
+        : { id: String(cursor.key), handle: cursor.value });
       cursor.continue();
     };
     request.onerror = () => reject(request.error);
+  });
+}
+
+export async function deleteDirectoryHandle(id: string) {
+  const db = await openHandleDatabase();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction('handles', 'readwrite');
+    tx.objectStore('handles').delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+}
+export async function deletePdfFiles(ids: string[]) {
+  const db = await openDatabase();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction('files', 'readwrite');
+    for (const id of ids) {
+      tx.objectStore('files').delete(id);
+      tx.objectStore('files').delete(`thumbnail:${id}`);
+    }
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
   });
 }

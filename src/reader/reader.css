@@ -30,7 +30,7 @@
 
 .reader-fullscreen-button { display:flex; align-items:center; justify-content:center; width:36px; height:36px; flex-shrink:0; border-radius:10px; }
 .reader-fullscreen-button:hover { background:var(--surface); }
-.reader-fullscreen { position:fixed; inset:0; width:100vw; height:100dvh; z-index:100; }
+.pdf-viewer.reader-fullscreen { position:fixed; inset:0; width:100%; height:100%; z-index:100; }
 .reader-fullscreen:not(.reader-controls-visible) > .reader-topbar,
 .reader-fullscreen:not(.reader-controls-visible) > .reader-toolbar { display:none; }
 .reader-fullscreen:not(.reader-controls-visible) .pdf-scroller { padding-top:56px; }
@@ -140,3 +140,70 @@
 .reader-selection-status { position:absolute; left:16px; bottom:16px; z-index:20; display:flex; align-items:center; gap:10px; background:#fffffff2; border:1px solid #ddd; color:#333; border-radius:16px; padding:8px 12px; box-shadow:0 2px 12px #0002; font-size:12px; }
 .reader-selection-status button { color:#2365b8; padding:4px; }
 .reader-selection-status button:disabled { color:#999; }
+
+/* A quiet surface separates the annotation wheel from page content. */
+.reader-ring-items::before {
+  content:"";
+  position:absolute;
+  right:-8px;
+  bottom:-8px;
+  width:420px;
+  height:420px;
+  border-radius:400px 22px 26px 22px;
+  background:linear-gradient(135deg, #ffffff30 0%, #17222e99 35%, #060b13b8 100%);
+  backdrop-filter:blur(28px) saturate(155%);
+  -webkit-backdrop-filter:blur(28px) saturate(155%);
+  border:1px solid #ffffff30;
+  box-shadow:0 16px 48px #00000050, inset 1px 1px 0 #ffffff60, inset -1px -1px 0 #ffffff18;
+  pointer-events:auto;
+}
+
+/* Keep the wheel legible over printed text in either app theme. */
+.reader-tool-ring button { background:#fff; color:#283342; border-color:#dbe1e8; box-shadow:0 2px 5px #18253612; transition:background .15s, box-shadow .15s; }
+.reader-tool-ring button:focus-visible { outline:3px solid #367ee9; outline-offset:3px; }
+.reader-tool-ring button:hover:not(:disabled) { box-shadow:0 3px 10px #18253630; }
+.reader-tool-ring .reader-ring-tool { width:58px; height:58px; padding-bottom:6px; }
+.reader-ring-tool > span:last-child { font-size:10px; line-height:13px; font-weight:600; }
+.reader-tool-ring .reader-ring-tool.active { background:#fff0bc; border:2px solid #d89d00; box-shadow:0 0 0 3px #edb91d20; color:#483600; }
+.reader-ring-art { filter:drop-shadow(0 1px 1px #28334235); }
+.reader-tool-ring .reader-ring-history button { display:grid; place-items:center; width:38px; height:38px; padding:8px; }
+.reader-tool-ring .reader-ring-history button:disabled { opacity:1; color:#adb6c2; background:#e8edf3; box-shadow:none; border-color:transparent; }
+.reader-tool-ring .reader-ring-lock { background:#fff; }
+.reader-tool-ring .reader-ring-toggle { background:#263445; border-color:#263445; color:#fff; box-shadow:0 4px 12px #18253630; }
+.reader-tool-ring .reader-outer-color { border-width:2px; box-shadow:0 1px 4px #18253630; }
+.reader-tool-ring .reader-outer-color[aria-pressed="true"] { outline:2px solid #263445; outline-offset:3px; }
+.reader-ring-caption { position:absolute; right:20px; bottom:132px; width:112px; color:#c9d2de; text-align:center; }
+.reader-ring-caption > span { display:block; font-size:11px; font-weight:500; letter-spacing:.02em; }
+.reader-ring-caption strong { display:block; margin-top:5px; font-size:23px; font-weight:600; color:#f5f7fa; font-variant-numeric:tabular-nums; }
+.reader-ring-caption small { font-size:12px; font-weight:400; color:#c9d2de; }
+
+.reader-tool-ring .reader-ring-art { display:grid; place-items:center; height:32px; width:36px; filter:none; }
+.reader-tool-ring .reader-ring-art > svg { width:27px; height:27px; stroke-width:1.9; }
+.reader-tool-ring .reader-ring-tool { background:linear-gradient(145deg,#fffffff5,#e5edf5e6); border-color:#ffffffa6; box-shadow:0 3px 10px #0003,inset 0 1px 0 #fff; }
+.reader-tool-ring .reader-ring-tool.active { background:linear-gradient(145deg,#fff7da,#ffdd78); border-color:#ffd15a; color:#352800; box-shadow:0 0 0 3px #ffd15a33,0 3px 12px #0003; }
+.reader-stroke-preview { height:36px; display:grid; place-items:center; margin-top:4px; }
+.reader-stroke-preview > span { display:block; border-radius:50%; box-shadow:0 0 0 1px #ffffff80; transition:width .1s,height .1s; }
+
+/* Blend the complete highlight layer with the PDF canvas, keeping dark text dark. */
+.pdf-highlight-layer { position:absolute; inset:0; width:100%; height:100%; z-index:2; pointer-events:none; mix-blend-mode:multiply; }
+
+.reader-corner-layout .reader-palette-popup { background:linear-gradient(145deg,#202b38f0,#101820f0); backdrop-filter:blur(22px); -webkit-backdrop-filter:blur(22px); border:1px solid #ffffff30; padding:18px; border-radius:20px; max-height:calc(100% - 112px); overflow-y:auto; }
+.reader-palette { width:294px; max-width:calc(100vw - 80px); gap:10px; color:#f5f7fa; }
+.reader-palette-title { font-size:16px; margin-bottom:4px; }
+.reader-palette-label { font-size:11px; font-weight:600; color:#c3cfdd; margin-top:4px; }
+.reader-palette .reader-shades,.reader-palette .reader-spectrum,.reader-soft-colors { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:8px; }
+.reader-palette .reader-shades button,.reader-palette .reader-spectrum button,.reader-soft-colors button { width:100%; height:auto; aspect-ratio:1; min-width:0; border-radius:9px; border:1px solid #ffffff80; box-shadow:inset 0 1px 0 #ffffff55; }
+.reader-palette button[aria-pressed="true"] { outline:2px solid #fff; outline-offset:2px; box-shadow:inset 0 0 0 2px #182536; }
+.reader-palette button:focus-visible { outline:3px solid #79b8ff; outline-offset:2px; }
+.reader-palette .reader-custom-color { display:flex; gap:10px; margin-top:8px; padding:12px; border:1px solid #ffffff40; border-radius:12px; background:#ffffff12; color:#fff; cursor:pointer; }
+.reader-custom-color > span { flex:1; }
+.reader-custom-color strong { display:block; font-size:13px; }
+.reader-custom-color small { display:block; margin-top:4px; font-size:11px; color:#c3cfdd; }
+.reader-custom-color code { font-size:11px; color:#dce6f2; }
+.reader-palette .reader-custom-color input[type="color"] { flex-shrink:0; width:42px; height:42px; padding:3px; border:1px solid #ffffff80; border-radius:9px; background:#ffffff20; }
+
+.reader-page-jump { position:absolute; top:14px; left:50%; transform:translateX(-50%); z-index:24; display:flex; align-items:center; gap:8px; padding:6px 10px; border:1px solid #ffffff50; border-radius:20px; background:#17202bde; backdrop-filter:blur(16px); color:#fff; box-shadow:0 3px 14px #0002; font-size:12px; }
+.reader-page-jump span { white-space:nowrap; }
+.reader-page-jump input { width:48px; min-width:0; padding:5px; border:1px solid #ffffff40; border-radius:8px; color:#fff; background:#ffffff12; font-size:12px; }
+.reader-page-jump button { padding:5px 8px; color:#fff; border-radius:8px; background:#ffffff20; }
+.reader-page-jump button:disabled { opacity:.45; }

@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import {
-  Node,
   NodeViewWrapper,
-  ReactNodeViewRenderer,
   type NodeViewProps,
 } from '@tiptap/react';
 import { loadPdf } from './reader/pdf';
@@ -13,6 +11,13 @@ import type { PdfMark } from './reader/types';
 
 function drawMarks(ctx: CanvasRenderingContext2D, marks: PdfMark[], width: number, height: number) {
   for (const mark of marks) {
+    ctx.save();
+    try {
+    if (mark.transform) {
+      const [a,b,c,d,e,f]=mark.transform;
+      ctx.transform(a,b*height/width,c*width/height,d,e*width,f*height);
+    }
+    ctx.globalCompositeOperation = mark.kind === 'highlight' || mark.kind === 'marker' ? 'multiply' : 'source-over';
     const color = mark.color || '#f2a900';
     if (mark.kind === 'text' && mark.text && mark.points.length >= 2) {
       ctx.fillStyle = color;
@@ -22,7 +27,7 @@ function drawMarks(ctx: CanvasRenderingContext2D, marks: PdfMark[], width: numbe
       continue;
     }
     if (mark.rects.length) {
-      ctx.globalAlpha = mark.kind === 'highlight' ? 0.3 : 0.5;
+      ctx.globalAlpha = mark.kind === 'highlight' ? 0.4 : 0.5;
       ctx.fillStyle = color;
       for (const rect of mark.rects) ctx.fillRect(rect.x * width, rect.y * height, rect.width * width, rect.height * height);
     }
@@ -38,10 +43,11 @@ function drawMarks(ctx: CanvasRenderingContext2D, marks: PdfMark[], width: numbe
       ctx.stroke();
     }
     ctx.globalAlpha = 1;
+    } finally { ctx.restore(); }
   }
 }
 
-function PdfPageView({ node, updateAttributes, selected, extension }: NodeViewProps) {
+export default function PdfPageView({ node, updateAttributes, selected, extension }: NodeViewProps) {
   const { documentId, pageNum, width = 480, marks = [] } = node.attrs as { documentId: string; pageNum: number; width: number; marks: PdfMark[] };
   const readDocs = useStore(s => s.readDocuments);
   const docMeta = readDocs.find(d => d.id === documentId);
@@ -171,64 +177,3 @@ function PdfPageView({ node, updateAttributes, selected, extension }: NodeViewPr
   );
 }
 
-export const PdfPageBlock = Node.create<{
-  onOpenReader?: (documentId: string, pageNum: number) => void;
-}>({
-  name: 'pdfPage',
-  group: 'block',
-  atom: true,
-  draggable: true,
-
-  addOptions() {
-    return {
-      onOpenReader: undefined,
-    };
-  },
-
-  addAttributes() {
-    return {
-      documentId: {
-        default: null,
-        parseHTML: el => el.getAttribute('data-pdf-doc'),
-      },
-      pageNum: {
-        default: 1,
-        parseHTML: el => Number(el.getAttribute('data-pdf-page')) || 1,
-      },
-      width: {
-        default: 480,
-        parseHTML: el => Number(el.getAttribute('data-pdf-width')) || 480,
-      },
-      marks: {
-        default: [],
-        parseHTML: el => {
-          try { return JSON.parse(el.getAttribute('data-pdf-marks') || '[]'); } catch { return []; }
-        },
-      },
-    };
-  },
-
-  parseHTML() {
-    return [
-      {
-        tag: 'div[data-pdf-doc]',
-      },
-    ];
-  },
-
-  renderHTML({ node }) {
-    return [
-      'div',
-      {
-        'data-pdf-doc': node.attrs.documentId,
-        'data-pdf-page': node.attrs.pageNum,
-        'data-pdf-width': node.attrs.width,
-        'data-pdf-marks': JSON.stringify(node.attrs.marks || []),
-      },
-    ];
-  },
-
-  addNodeView() {
-    return ReactNodeViewRenderer(PdfPageView);
-  },
-});

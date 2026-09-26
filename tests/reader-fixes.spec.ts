@@ -10,8 +10,10 @@ test('folder picker preserves every directory even empty, non-PDF, or failed PDF
       directory('1FT',[file('first.pdf')]),directory('2ND',[file('second.pdf')]),directory('3RD',[]),directory('Non PDF',[file('image.jpg')]),directory('Broken',[file('broken.pdf',false)])])});
   },bytes);
   await page.getByRole('button',{name:'Read',exact:true}).click();
+  await page.getByRole('button',{name:'Add to library',exact:true}).click();
   await page.locator('.reader-header-actions').getByRole('button',{name:'Import folder',exact:true}).click();
   await expect(page.getByRole('alert')).toContainText('2 imported, 1 failed');
+  await page.getByRole('button',{name:'Add to library',exact:true}).click();
   await page.locator('.reader-header-actions').getByRole('button',{name:'Import folder',exact:true}).click();
   await expect(page.getByRole('alert')).toContainText('2 imported, 1 failed');
   expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('minotes-v1')!).state.readDocuments.length)).toBe(2);

@@ -90,8 +90,18 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-The workflow runs `npm ci`, builds Tauri, and attaches the NSIS and MSI installers to the GitHub Release. It can also be started manually for an existing tag from the GitHub Actions page.
+Before tagging, commit the workflow and application changes, and make sure the versions in `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, and `src-tauri/tauri.conf.json` agree. The tag must be `v` followed by the application version.
+
+The workflow checks out the exact tag, validates the application version, installs Node and Rust, runs drawing/geometry checks, and builds Windows x64 NSIS and MSI installers using the Rust lockfile. It publishes both installers and `SHA256SUMS.txt` to the GitHub Release and saves a separate Actions artifact. Tags containing a hyphen (such as `v0.1.0-beta.1`) create prereleases.
+
+To rerun an existing tag, open **Actions → Release Mi Notes → Run workflow** and enter the tag. The workflow uses GitHub's automatic `GITHUB_TOKEN`; no personal access token is needed. Repository policies must allow the workflow to write release contents.
+
+The installers are currently **unsigned**, and the release description states this. GitHub's token authorizes uploading files; it is not a Windows code-signing certificate. Windows certificate signing must be configured separately once a signing provider is available.
 
 ## Data and privacy
 
 Notes, tasks, settings, PDF metadata, annotations, and imported PDF copies are stored locally. Folder synchronization reads source folders and never writes changes back to the original files. Removing the app does not necessarily remove browser/WebView local data; manage that separately if a full reset is required.
+
+## Google Drive folders
+
+Connect directly to Google Drive from the browser or Windows app under **Read ? Add ? Google Drive**. See [Google Drive setup](GOOGLE_DRIVE_SETUP.md) for the one-time OAuth configuration, refresh behavior, and development requirements.

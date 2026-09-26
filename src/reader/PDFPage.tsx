@@ -1,3 +1,4 @@
+import { identity, multiply, svgMatrix, type Matrix } from './transform';
 import {strokePath} from '../ink';
 import {memo,useEffect,useLayoutEffect,useRef,useState,type PointerEvent as ReactPointerEvent} from 'react';
 import {TextLayer,type PDFDocumentProxy,type PDFPageProxy} from 'pdfjs-dist';
@@ -7,9 +8,10 @@ import {isShape,shapePoints,correctShape} from '../shapes';
 
 type Props={pdf:PDFDocumentProxy;pageNum:number;scale:number;width:number;height:number;active:boolean;marks:PdfMark[];tool:ReaderTool;color:string;inkWidth:number;autoShapes:boolean;selectedIds:string[];onSelect:(ids:string[],mode?:'replace'|'add'|'toggle')=>void;onMove:(marks:PdfMark[])=>void;onMark:(mark:PdfMark)=>void;onErase:(ids:string[])=>void;onSize:(page:number,width:number,height:number)=>void};
 const MarkShape=memo(function MarkShape({mark,width,height}:{mark:PdfMark;width:number;height:number}){
+  if(mark.transform)return <g transform={svgMatrix(mark.transform,width,height)}><MarkShape mark={{...mark,transform:undefined}} width={width} height={height}/></g>;
   const points=mark.points.map((n,i)=>n*(i%2?height:width));
   if(mark.kind==='text'&&mark.text)return <text data-mark-id={mark.id} data-kind={mark.kind} x={points[0]} y={points[1]} fill={mark.color} fontSize={mark.width*width} dominantBaseline="hanging">{mark.text}</text>;
-  return <g data-mark-id={mark.id} data-kind={mark.kind} data-shape={mark.shape} opacity={mark.kind==='ink'?1:.32} style={{mixBlendMode:mark.kind==='ink'?'normal':'multiply'}}>
+  return <g data-mark-id={mark.id} data-kind={mark.kind} data-shape={mark.shape} opacity={mark.kind==='highlight'?.4:mark.kind==='marker'?.32:1}>
     {mark.rects.map((r,i)=><rect key={i} x={r.x*width} y={r.y*height} width={r.width*width} height={r.height*height} fill={mark.color}/>)}
     {points.length>=4&&<path d={strokePath(points,!mark.shape)} fill="none" stroke={mark.color} strokeWidth={mark.width*width} strokeLinecap="round" strokeLinejoin="round"/>}
   </g>;
@@ -19,10 +21,13 @@ export default memo(function PDFPage({pdf,pageNum,scale,width,height,active,mark
   const canvasRef=useRef<HTMLCanvasElement>(null),textRef=useRef<HTMLDivElement>(null),pageRef=useRef<PDFPageProxy|null>(null);
   const [ready,setReady]=useState(false),[error,setError]=useState(''),[rasterScale,setRasterScale]=useState(scale);
   const [draft,setDraft]=useState<PdfMark|null>(null);
+  const transforming=useRef<{mark:PdfMark;box:{x:number;y:number;width:number;height:number};mode:string;startX:number;startY:number;next:PdfMark}|null>(null);
   const moving=useRef<{marks:PdfMark[];x:number;y:number;next:PdfMark[]}|null>(null);
   const marquee=useRef<{x:number;y:number;endX:number;endY:number;add:boolean}|null>(null);
   const [selectionArea,setSelectionArea]=useState<{x:number;y:number;width:number;height:number}|null>(null);
   const [movePreview,setMovePreview]=useState<PdfMark[]>([]),[textDraft,setTextDraft]=useState<{x:number;y:number;value:string}|null>(null);
+  const lastTextTap=useRef<{x:number;y:number;time:number}|null>(null);
+  const textTouchStart=useRef<{x:number;y:number}|null>(null);
   const strokeStart=useRef<[number,number]>([0,0]);
   const draftRef=useRef<PdfMark|null>(null),frame=useRef(0),erased=useRef(new Set<string>());
   const [hiddenMarks,setHiddenMarks]=useState<Set<string>>(new Set());
@@ -125,11 +130,30 @@ export default memo(function PDFPage({pdf,pageNum,scale,width,height,active,mark
       }
     }
   };
+  const transformSelection=(event:ReactPointerEvent<SVGSVGElement>)=>{
+    const gesture=transforming.current;if(!gesture)return;
+    const [x,y]=position(event),box=gesture.box;
+    let matrix:Matrix;
+    if(gesture.mode==='rotate'){
+      const cx=box.x+box.width/2,cy=box.y+box.height/2;
+      const angle=Math.atan2((y-cy)*height,(x-cx)*width)-Math.atan2((gesture.startY-cy)*height,(gesture.startX-cx)*width);
+      const c=Math.cos(angle),s=Math.sin(angle);
+      matrix=[c,s*width/height,-s*height/width,c,cx-c*cx+s*height/width*cy,cy-s*width/height*cx-c*cy];
+    }else{
+      const left=gesture.mode.includes('w'),top=gesture.mode.includes('n');
+      const ax=left?box.x+box.width:box.x,ay=top?box.y+box.height:box.y;
+      const sx=Math.max(.1,(x-ax)/(gesture.startX-ax||.001)),sy=Math.max(.1,(y-ay)/(gesture.startY-ay||.001));
+      matrix=[sx,0,0,sy,ax*(1-sx),ay*(1-sy)];
+    }
+    gesture.next={...gesture.mark,transform:multiply(matrix,gesture.mark.transform||identity)};
+    setMovePreview([gesture.next]);
+  };
   const finish=()=>{
     cancelAnimationFrame(frame.current);frame.current=0;
+    if(transforming.current){onMove([transforming.current.next]);transforming.current=null;setMovePreview([])}
     if(moving.current){
       const {marks:original,next}=moving.current;
-      if(next.some((mark,j)=>mark.points.some((n,i)=>Math.abs(n-original[j].points[i])>1e-6)))onMove(next);
+      if(next.some((mark,j)=>JSON.stringify(mark)!==JSON.stringify(original[j])))onMove(next);
       moving.current=null;setMovePreview([]);
     }
     if(marquee.current){
@@ -155,20 +179,45 @@ export default memo(function PDFPage({pdf,pageNum,scale,width,height,active,mark
     onMark({id:crypto.randomUUID(),page:pageNum,kind:'text',color:'#000000',rects:[{x:textDraft.x,y:textDraft.y,width:Math.min(1-textDraft.x,value.length*10/width),height:24/height}],points:[textDraft.x,textDraft.y],width:18/width,text:value});
     setTextDraft(null);
   };
+  const openText=(clientX:number,clientY:number)=>{
+    if(tool!=='text'&&tool!=='highlight')return;
+    // Preserve word selection/highlighting, but allow blank-page double taps with the default tool.
+    if(tool==='highlight'&&window.getSelection()?.toString())return;
+    const rect=textRef.current?.getBoundingClientRect();if(!rect)return;
+    window.getSelection()?.removeAllRanges();
+    setTextDraft({x:clamp((clientX-rect.left)/rect.width,0,1),y:clamp((clientY-rect.top)/rect.height,0,1),value:''});
+  };
   const selectionBoxes=tool==='move'?marks.filter(mark=>selectedIds.includes(mark.id)).map(mark=>({id:mark.id,box:markBounds(movePreview.find(item=>item.id===mark.id)||mark)})):[];
   return <div className="pdf-page-container" data-page-number={pageNum} data-active={active} data-rendered={ready} style={{width:width*scale,height:height*scale,minHeight:height*scale}}>
     <div className="pdf-page-surface" style={{width,height,transform:`scale(${scale})`}}>
       <canvas ref={canvasRef} className="pdf-canvas" style={{width,height,visibility:ready?'visible':'hidden'}}/>
       {!ready&&<div className="pdf-page-placeholder">{error?<span role="alert">{error}</span>:pageNum}</div>}
-      <div ref={textRef} className="pdf-text-layer textLayer" style={{pointerEvents:drawing?'none':'auto',userSelect:drawing?'none':'text'}} onClick={event=>{
-        if(tool!=='text'||window.getSelection()?.toString())return;
-        const rect=event.currentTarget.getBoundingClientRect();
-        setTextDraft({x:clamp((event.clientX-rect.left)/rect.width,0,1),y:clamp((event.clientY-rect.top)/rect.height,0,1),value:''});
-      }}/>
-      {textDraft&&tool==='text'&&<input autoFocus className="pdf-text-input" value={textDraft.value} onChange={event=>setTextDraft({...textDraft,value:event.target.value})} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();commitText()}if(event.key==='Escape')setTextDraft(null)}} onBlur={commitText} style={{left:textDraft.x*width,top:textDraft.y*height,fontSize:18,color:'#000000'}} aria-label="Text annotation"/>}
+      <div ref={textRef} className="pdf-text-layer textLayer" style={{pointerEvents:drawing?'none':'auto',userSelect:drawing?'none':'text',touchAction:'manipulation'}}
+        onDoubleClick={event=>openText(event.clientX,event.clientY)}
+        onPointerDown={event=>{if(event.pointerType==='touch')textTouchStart.current={x:event.clientX,y:event.clientY}}}
+        onPointerCancel={()=>{textTouchStart.current=null;lastTextTap.current=null}}
+        onPointerUp={event=>{
+          if(event.pointerType!=='touch')return;
+          const start=textTouchStart.current;textTouchStart.current=null;
+          if(!start||Math.hypot(event.clientX-start.x,event.clientY-start.y)>12){lastTextTap.current=null;return}
+          const previous=lastTextTap.current,now=Date.now();
+          if(previous&&now-previous.time<400&&Math.hypot(event.clientX-previous.x,event.clientY-previous.y)<24){
+            lastTextTap.current=null;openText(event.clientX,event.clientY);
+          }else lastTextTap.current={x:event.clientX,y:event.clientY,time:now};
+        }}/>
+      {textDraft&&<input autoFocus className="pdf-text-input" value={textDraft.value} onChange={event=>setTextDraft({...textDraft,value:event.target.value})} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();commitText()}if(event.key==='Escape')setTextDraft(null)}} onBlur={commitText} style={{left:textDraft.x*width,top:textDraft.y*height,fontSize:18,color:'#000000'}} aria-label="Text annotation"/>}
+      <svg className="pdf-highlight-layer" viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
+        {marks.filter(mark=>(mark.kind==='highlight'||mark.kind==='marker')&&!hiddenMarks.has(mark.id)).map(mark=><MarkShape key={mark.id} mark={movePreview.find(item=>item.id===mark.id)||mark} width={width} height={height}/>)}
+        {draft?.kind==='marker'&&<MarkShape mark={draft} width={width} height={height}/>}
+      </svg>
       <svg className="pdf-annotation-layer" viewBox={`0 0 ${width} ${height}`} style={{pointerEvents:drawing?'auto':'none',touchAction:drawing?'none':'auto',cursor:tool==='move'?(movePreview.length?'grabbing':'grab'):drawing?'crosshair':'auto'}} aria-label={`Annotations on page ${pageNum}`}
         onPointerDown={event=>{
           if(event.button!==0||!drawing)return;event.preventDefault();event.currentTarget.setPointerCapture(event.pointerId);
+          const handle=(event.target as Element).closest('[data-transform]');
+          if(tool==='move'&&handle){
+            const mark=marks.find(mark=>mark.id===handle.getAttribute('data-mark'));const box=mark&&markBounds(mark);
+            if(mark&&box){const [startX,startY]=position(event);transforming.current={mark,box,mode:handle.getAttribute('data-transform')!,startX,startY,next:mark};return}
+          }
           if(tool==='erase'){erase(event);return}
           if(tool==='move'){
             const [x,y]=position(event);
@@ -194,18 +243,27 @@ export default memo(function PDFPage({pdf,pageNum,scale,width,height,active,mark
         }}
         onPointerMove={event=>{
           if(!event.currentTarget.hasPointerCapture(event.pointerId))return;
+          if(transforming.current){transformSelection(event);return}
           if(tool==='erase'){erase(event);return}
           if(moving.current){move(event);return}
           if(marquee.current){resizeSelection(event);return}
           collect(event);
           if(!frame.current)frame.current=requestAnimationFrame(()=>{frame.current=0;if(draftRef.current)setDraft({...draftRef.current,points:[...draftRef.current.points]})});
         }}
-        onPointerUp={event=>{if(moving.current)move(event);else if(marquee.current)resizeSelection(event);else collect(event);finish()}} onPointerCancel={()=>{moving.current=null;setMovePreview([]);marquee.current=null;setSelectionArea(null);draftRef.current=null;setDraft(null);erased.current.clear();setHiddenMarks(new Set());cancelAnimationFrame(frame.current);frame.current=0}}
+        onPointerUp={event=>{if(transforming.current)transformSelection(event);else if(moving.current)move(event);else if(marquee.current)resizeSelection(event);else collect(event);finish()}} onPointerCancel={()=>{transforming.current=null;moving.current=null;setMovePreview([]);marquee.current=null;setSelectionArea(null);draftRef.current=null;setDraft(null);erased.current.clear();setHiddenMarks(new Set());cancelAnimationFrame(frame.current);frame.current=0}}
       >
-        {marks.filter(m=>!hiddenMarks.has(m.id)).map(mark=><MarkShape key={mark.id} mark={movePreview.find(item=>item.id===mark.id)||mark} width={width} height={height}/>)}
+        {marks.filter(m=>m.kind!=='highlight'&&m.kind!=='marker'&&!hiddenMarks.has(m.id)).map(mark=><MarkShape key={mark.id} mark={movePreview.find(item=>item.id===mark.id)||mark} width={width} height={height}/>)}
         {selectionBoxes.map(({id,box})=>box&&<rect key={id} className="pdf-selection-box" x={box.x*width-4/scale} y={box.y*height-4/scale} width={box.width*width+8/scale} height={box.height*height+8/scale} fill="none" stroke="#3587f5" strokeWidth={1.5/scale} strokeDasharray={`${5/scale} ${3/scale}`} pointerEvents="none"/>)}
+        {selectionBoxes.length===1&&selectionBoxes.map(({id,box})=>box&&<g key={`handles-${id}`}>
+          <line x1={(box.x+box.width/2)*width} y1={box.y*height} x2={(box.x+box.width/2)*width} y2={Math.max(10/scale,box.y*height-28/scale)} stroke="#3587f5" strokeWidth={1/scale}/>
+          {(['nw','ne','sw','se','rotate'] as const).map(mode=>{
+            const x=mode==='rotate'?box.x+box.width/2:mode.includes('w')?box.x:box.x+box.width;
+            const y=mode==='rotate'?Math.max(10/scale/height,box.y-28/scale/height):mode.includes('n')?box.y:box.y+box.height;
+            return <circle key={mode} data-transform={mode} data-mark={id} aria-label={mode==='rotate'?'Rotate annotation':`Resize annotation ${mode}`} cx={x*width} cy={y*height} r={7/scale} fill="white" stroke="#3587f5" strokeWidth={2/scale} style={{cursor:mode==='rotate'?'grab':`${mode}-resize`}}/>;
+          })}
+        </g>)}
         {selectionArea&&<rect className="pdf-selection-marquee" x={selectionArea.x*width} y={selectionArea.y*height} width={selectionArea.width*width} height={selectionArea.height*height} fill="#3587f51a" stroke="#3587f5" strokeWidth={1/scale} pointerEvents="none"/>}
-        {draft&&<MarkShape mark={draft} width={width} height={height}/>}
+        {draft&&draft.kind!=='marker'&&<MarkShape mark={draft} width={width} height={height}/>}
       </svg>
     </div>
   </div>;

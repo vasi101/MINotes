@@ -9,6 +9,8 @@ import DrawingScreen from "./DrawingScreen";
 import FolderHome from "./FolderHome";
 import ReaderHome from "./reader/ReaderHome";
 import ReadFolderHome from "./reader/ReadFolderHome";
+import GoogleDriveSheet from "./reader/GoogleDriveSheet";
+import { startDriveBackgroundSync, useDriveSync } from "./reader/googleDrive";
 import PDFViewer from "./reader/PDFViewer";
 
 export function Sheet({
@@ -67,6 +69,10 @@ export default function App() {
   const [folderHome, setFolderHome] = useState(true);
   const [query, setQuery] = useState("");
   const [panel, setPanel] = useState<"settings" | "task" | null>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const driveSync = useDriveSync();
+  const driveSynced = !driveSync.busy && !driveSync.error && Object.values(driveSync.folders).length > 0 && Object.values(driveSync.folders).every(state => state === 'synced');
+  useEffect(() => startDriveBackgroundSync(), []);
   const [draft, setDraft] = useState<Task | null>(null);
 
   const [trash, setTrash] = useState(false);
@@ -212,6 +218,13 @@ export default function App() {
                       label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
                       onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
                     />
+                    <button className={`sync-icon-button ${driveSync.busy ? 'is-syncing' : ''}`} aria-label="View Drive sync status" aria-busy={driveSync.busy} title={driveSync.busy ? driveSync.message : driveSynced ? 'Drive synced' : 'Drive sync status'} onClick={() => setProfileOpen(true)}>
+                      <Icon name="repeat" size={22}/>
+                    </button>
+                    <button className="profile-button" aria-label="Profile" title="Profile and Google Drive" onClick={() => setProfileOpen(true)}>
+                      <Icon name="profile" size={22}/>
+                      {Object.keys(driveSync.folders).length > 0 && <span aria-label={driveSynced ? 'Folders synced' : 'Folders not synced'} className={`profile-dot ${driveSynced ? '' : 'needs-attention'}`}/>}
+                    </button>
                     <IconButton
                       icon="settings"
                       label="Settings"
@@ -434,6 +447,8 @@ export default function App() {
           )}
         </motion.main>
       </AnimatePresence>
+      {profileOpen && <GoogleDriveSheet profile basePath="" onClose={() => setProfileOpen(false)} onBusy={() => {}}/>}
+
       {panel === "settings" && (
         <Sheet title="Settings" onClose={() => setPanel(null)}>
           <label className="setting-row">
