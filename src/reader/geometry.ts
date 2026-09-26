@@ -3,6 +3,22 @@ import {flattenedStroke} from '../ink';
 import type { PdfMark, PdfRect } from './types';
 export const clamp = (value:number,min:number,max:number)=>Math.max(min,Math.min(max,value));
 
+export function measureTextRect(text:string,fontSizePx:number,x:number,y:number,pageWidth:number,pageHeight:number):PdfRect{
+  let textWidth=text.length*fontSizePx*0.6;
+  try{
+    const canvas=document.createElement('canvas');
+    const ctx=canvas.getContext('2d');
+    if(ctx){
+      ctx.font=`500 ${fontSizePx}px Roboto, sans-serif`;
+      textWidth=ctx.measureText(text).width;
+    }
+  }catch{}
+  const pad=4;
+  const w=Math.min(1-x,(textWidth+pad*2)/pageWidth);
+  const h=(fontSizePx*1.3)/pageHeight;
+  return {x,y,width:Math.max(0.01,w),height:Math.max(0.01,h)};
+}
+
 // Merge adjacent PDF text runs into line bands without joining separate columns.
 export function mergeTextRects(rects:PdfRect[]):PdfRect[]{
   const lines:PdfRect[]=[];

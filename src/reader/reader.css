@@ -1,9 +1,22 @@
-.pdf-scroller { display:block; position:relative; padding:20px; scroll-behavior:auto; overflow-anchor:none; overscroll-behavior:contain; scrollbar-gutter:stable; }
-.pdf-page-slot { display:block; margin:0 auto 24px; }
-.pdf-page-container { contain:layout paint; border-radius:2px; }
-.pdf-page-surface { position:absolute; left:0; top:0; transform-origin:0 0; background:white; }
+.pdf-scroller { display:block; position:relative; padding:24px 20px; scroll-behavior:auto; overflow-anchor:none; overscroll-behavior:contain; scrollbar-gutter:stable; }
+.pdf-page-slot { display:block; margin:0 auto 28px; }
+/* ── Apple iOS widget card ── */
+.pdf-page-container {
+  contain:layout paint;
+  border-radius:22px;
+  background:#1c1c1e;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.07),
+    0 12px 40px rgba(0,0,0,0.55),
+    0 4px 12px rgba(0,0,0,0.35),
+    0 1px 3px rgba(0,0,0,0.25);
+  overflow:hidden;
+  padding:7px;
+}
+.pdf-page-surface { position:absolute; left:7px; top:7px; transform-origin:0 0; background:white; border-radius:16px; overflow:hidden; }
 .pdf-canvas { position:absolute; inset:0; }
-.pdf-annotation-layer { position:absolute; inset:0; width:100%; height:100%; z-index:3; }
+.pdf-annotation-layer { position:absolute; inset:0; width:100%; height:100%; z-index:5; }
+.pdf-annotation-layer text { font-family: Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; user-select: none; }
 .pdf-text-layer.textLayer { position:absolute; inset:0; z-index:4; overflow:clip; text-align:initial; line-height:1; text-size-adjust:none; forced-color-adjust:none; transform-origin:0 0; caret-color:CanvasText; --min-font-size:1; --text-scale-factor:calc(var(--total-scale-factor) * var(--min-font-size)); --min-font-size-inv:calc(1 / var(--min-font-size)); }
 .pdf-text-layer.textLayer :is(span,br) { color:transparent; position:absolute; white-space:pre; cursor:text; transform-origin:0 0; user-select:inherit; pointer-events:inherit; }
 .pdf-text-layer.textLayer > :not(.markedContent), .pdf-text-layer.textLayer .markedContent span:not(.markedContent) { --font-height:0; --scale-x:1; --rotate:0deg; font-size:calc(var(--text-scale-factor) * var(--font-height)); transform:rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv)); }
@@ -92,11 +105,22 @@
 }
 
 /* Edge-to-edge paper with a corner tool ring; overlays never consume page space. */
-.pdf-viewer.reader-corner-layout { background:#f2f2f2; }
-.reader-corner-layout .pdf-scroller { position:absolute; inset:0; padding:0; background:#f2f2f2; scrollbar-gutter:auto; overflow-x:hidden; overflow-y:auto; }
-.reader-corner-layout.reader-fullscreen .pdf-scroller { padding:0; }
-.reader-corner-layout .pdf-page-slot { margin:0 auto 8px; }
-.reader-corner-layout .pdf-page-container { border-radius:0; box-shadow:none; }
+.pdf-viewer.reader-corner-layout { background:#c8c8cc; }
+.reader-corner-layout .pdf-scroller { position:absolute; inset:0; padding:16px 14px; background:linear-gradient(160deg,#b8b8be 0%,#d0d0d6 40%,#c4c4ca 100%); scrollbar-gutter:auto; overflow-x:hidden; overflow-y:auto; }
+.reader-corner-layout.reader-fullscreen .pdf-scroller { padding:16px 14px; }
+.reader-corner-layout .pdf-page-slot { margin:0 auto 16px; }
+/* Corner layout: same Apple card look */
+.reader-corner-layout .pdf-page-container {
+  border-radius:20px;
+  background:#1c1c1e;
+  padding:6px;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.07),
+    0 10px 36px rgba(0,0,0,0.48),
+    0 3px 10px rgba(0,0,0,0.28);
+  overflow:hidden;
+}
+.reader-corner-layout .pdf-page-surface { left:6px; top:6px; border-radius:15px; }
 .reader-back-corner { position:absolute; top:12px; left:12px; z-index:30; }
 .reader-back-corner .icon-button { width:44px; height:44px; background:#fffffff2; color:#343434; box-shadow:0 3px 14px #0002; }
 .reader-tool-ring { position:absolute; right:max(20px,env(safe-area-inset-right)); bottom:max(20px,env(safe-area-inset-bottom)); width:56px; height:56px; z-index:25; }
@@ -137,11 +161,19 @@
 .reader-thickness-slider:focus-visible { outline:none; }
 .reader-thickness-slider:focus-visible > circle:first-of-type { stroke:#2384ee; stroke-width:4; }
 
-.reader-selection-status { position:absolute; left:16px; bottom:16px; z-index:20; display:flex; align-items:center; gap:10px; background:#fffffff2; border:1px solid #ddd; color:#333; border-radius:16px; padding:8px 12px; box-shadow:0 2px 12px #0002; font-size:12px; }
+.reader-selection-status { position:absolute; left:16px; bottom:16px; z-index:20; display:flex; align-items:center; gap:10px; background:#fffffff2; border:1px solid #ddd; color:#333; border-radius:16px; padding:8px 12px; box-shadow:0 2px 12px #0002; font-size:12px; flex-wrap:wrap; }
 .reader-selection-status button { color:#2365b8; padding:4px; }
 .reader-selection-status button:disabled { color:#999; }
+.reader-text-size-controls { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding-left:10px; border-left:1px solid #d0d7de; margin-left:4px; min-width:0; }
+.reader-text-size-label { font-size:11px; font-weight:600; color:#57606a; }
+.reader-text-size-val { font-size:12px; font-weight:600; min-width:32px; text-align:center; color:#24292f; }
+.reader-text-size-controls button { padding:3px 7px; font-size:11px; font-weight:600; border-radius:6px; border:1px solid #d0d7de; background:#f6f8fa; color:#24292f; cursor:pointer; line-height:1; }
+.reader-text-size-controls button:hover:not(:disabled) { background:#eaeff4; color:#0969da; border-color:#0969da; }
+.reader-text-size-controls input[type="range"] { width:70px; height:4px; accent-color:#0969da; cursor:pointer; }
+.reader-preset-btn { min-width:24px; text-align:center; }
+.reader-preset-btn.active { background:#ddf4ff; color:#0969da; border-color:#54aeff; font-weight:700; }
 
-/* A quiet surface separates the annotation wheel from page content. */
+/* ── Tool wheel backdrop: Apple-style deep black glass ── */
 .reader-ring-items::before {
   content:"";
   position:absolute;
@@ -149,38 +181,49 @@
   bottom:-8px;
   width:420px;
   height:420px;
-  border-radius:400px 22px 26px 22px;
-  background:linear-gradient(135deg, #ffffff30 0%, #17222e99 35%, #060b13b8 100%);
-  backdrop-filter:blur(28px) saturate(155%);
-  -webkit-backdrop-filter:blur(28px) saturate(155%);
-  border:1px solid #ffffff30;
-  box-shadow:0 16px 48px #00000050, inset 1px 1px 0 #ffffff60, inset -1px -1px 0 #ffffff18;
+  border-radius:400px 24px 28px 24px;
+  background:radial-gradient(ellipse at 80% 90%, #2a2a2e 0%, #1c1c1e 55%, #111113 100%);
+  backdrop-filter:blur(40px) saturate(180%);
+  -webkit-backdrop-filter:blur(40px) saturate(180%);
+  border:1px solid rgba(255,255,255,0.1);
+  box-shadow:
+    0 24px 64px rgba(0,0,0,0.65),
+    0 8px 24px rgba(0,0,0,0.45),
+    inset 0 1px 0 rgba(255,255,255,0.12),
+    inset -1px -1px 0 rgba(255,255,255,0.04);
   pointer-events:auto;
 }
 
-/* Keep the wheel legible over printed text in either app theme. */
-.reader-tool-ring button { background:#fff; color:#283342; border-color:#dbe1e8; box-shadow:0 2px 5px #18253612; transition:background .15s, box-shadow .15s; }
-.reader-tool-ring button:focus-visible { outline:3px solid #367ee9; outline-offset:3px; }
-.reader-tool-ring button:hover:not(:disabled) { box-shadow:0 3px 10px #18253630; }
+/* ── Tool wheel buttons: crisp white cards on dark glass ── */
+.reader-tool-ring button { background:#ffffff; color:#1c1c1e; border-color:rgba(0,0,0,0.08); box-shadow:0 2px 8px rgba(0,0,0,0.18), inset 0 1px 0 #fff; transition:background .15s, box-shadow .15s, transform .1s; }
+.reader-tool-ring button:focus-visible { outline:3px solid #0a84ff; outline-offset:3px; }
+.reader-tool-ring button:hover:not(:disabled) { background:#f5f5f7; box-shadow:0 4px 14px rgba(0,0,0,0.28); transform:scale(1.04); }
 .reader-tool-ring .reader-ring-tool { width:58px; height:58px; padding-bottom:6px; }
-.reader-ring-tool > span:last-child { font-size:10px; line-height:13px; font-weight:600; }
-.reader-tool-ring .reader-ring-tool.active { background:#fff0bc; border:2px solid #d89d00; box-shadow:0 0 0 3px #edb91d20; color:#483600; }
-.reader-ring-art { filter:drop-shadow(0 1px 1px #28334235); }
+.reader-ring-tool > span:last-child { font-size:10px; line-height:13px; font-weight:600; letter-spacing:.01em; }
+/* Active tool: warm Apple-amber glow */
+.reader-tool-ring .reader-ring-tool.active { background:linear-gradient(145deg,#fff4d6,#ffcc00); border-color:#ffcc00; color:#3a2800; box-shadow:0 0 0 3px rgba(255,204,0,0.3), 0 4px 14px rgba(0,0,0,0.25); }
+.reader-ring-art { filter:drop-shadow(0 1px 2px rgba(0,0,0,0.22)); }
 .reader-tool-ring .reader-ring-history button { display:grid; place-items:center; width:38px; height:38px; padding:8px; }
-.reader-tool-ring .reader-ring-history button:disabled { opacity:1; color:#adb6c2; background:#e8edf3; box-shadow:none; border-color:transparent; }
-.reader-tool-ring .reader-ring-lock { background:#fff; }
-.reader-tool-ring .reader-ring-toggle { background:#263445; border-color:#263445; color:#fff; box-shadow:0 4px 12px #18253630; }
-.reader-tool-ring .reader-outer-color { border-width:2px; box-shadow:0 1px 4px #18253630; }
-.reader-tool-ring .reader-outer-color[aria-pressed="true"] { outline:2px solid #263445; outline-offset:3px; }
-.reader-ring-caption { position:absolute; right:20px; bottom:132px; width:112px; color:#c9d2de; text-align:center; }
-.reader-ring-caption > span { display:block; font-size:11px; font-weight:500; letter-spacing:.02em; }
-.reader-ring-caption strong { display:block; margin-top:5px; font-size:23px; font-weight:600; color:#f5f7fa; font-variant-numeric:tabular-nums; }
-.reader-ring-caption small { font-size:12px; font-weight:400; color:#c9d2de; }
+.reader-tool-ring .reader-ring-history button:disabled { opacity:1; color:#bcc4cc; background:#e8ecf0; box-shadow:none; border-color:transparent; }
+/* Lock button */
+.reader-tool-ring .reader-ring-lock { background:#ffffff; border:1px solid rgba(0,0,0,0.1); }
+/* Main toggle: Apple true-black */
+.reader-tool-ring .reader-ring-toggle { background:#1c1c1e; border:1px solid rgba(255,255,255,0.15); color:#fff; box-shadow:0 6px 20px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.12); }
+.reader-tool-ring .reader-ring-toggle:hover { background:#2c2c2e; }
+.reader-tool-ring .reader-outer-color { border-width:2px; border-color:#fff; box-shadow:0 2px 6px rgba(0,0,0,0.25); }
+.reader-tool-ring .reader-outer-color[aria-pressed="true"] { outline:2.5px solid #1c1c1e; outline-offset:3px; }
+/* Caption (stroke size label) */
+.reader-ring-caption { position:absolute; right:20px; bottom:132px; width:112px; color:rgba(255,255,255,0.55); text-align:center; }
+.reader-ring-caption > span { display:block; font-size:11px; font-weight:500; letter-spacing:.03em; text-transform:uppercase; }
+.reader-ring-caption strong { display:block; margin-top:5px; font-size:24px; font-weight:700; color:#f5f7fa; font-variant-numeric:tabular-nums; }
+.reader-ring-caption small { font-size:12px; font-weight:400; color:rgba(255,255,255,0.45); }
 
 .reader-tool-ring .reader-ring-art { display:grid; place-items:center; height:32px; width:36px; filter:none; }
 .reader-tool-ring .reader-ring-art > svg { width:27px; height:27px; stroke-width:1.9; }
-.reader-tool-ring .reader-ring-tool { background:linear-gradient(145deg,#fffffff5,#e5edf5e6); border-color:#ffffffa6; box-shadow:0 3px 10px #0003,inset 0 1px 0 #fff; }
-.reader-tool-ring .reader-ring-tool.active { background:linear-gradient(145deg,#fff7da,#ffdd78); border-color:#ffd15a; color:#352800; box-shadow:0 0 0 3px #ffd15a33,0 3px 12px #0003; }
+/* Normal tool button surface */
+.reader-tool-ring .reader-ring-tool { background:rgba(255,255,255,0.97); border:1px solid rgba(255,255,255,0.5); box-shadow:0 4px 14px rgba(0,0,0,0.22), inset 0 1px 0 #fff; }
+/* Active: Apple yellow accent */
+.reader-tool-ring .reader-ring-tool.active { background:linear-gradient(145deg,#fff9db,#ffcc00); border-color:rgba(255,204,0,0.9); color:#3a2800; box-shadow:0 0 0 3px rgba(255,204,0,0.25), 0 4px 14px rgba(0,0,0,0.22); }
 .reader-stroke-preview { height:36px; display:grid; place-items:center; margin-top:4px; }
 .reader-stroke-preview > span { display:block; border-radius:50%; box-shadow:0 0 0 1px #ffffff80; transition:width .1s,height .1s; }
 
@@ -202,8 +245,87 @@
 .reader-custom-color code { font-size:11px; color:#dce6f2; }
 .reader-palette .reader-custom-color input[type="color"] { flex-shrink:0; width:42px; height:42px; padding:3px; border:1px solid #ffffff80; border-radius:9px; background:#ffffff20; }
 
-.reader-page-jump { position:absolute; top:14px; left:50%; transform:translateX(-50%); z-index:24; display:flex; align-items:center; gap:8px; padding:6px 10px; border:1px solid #ffffff50; border-radius:20px; background:#17202bde; backdrop-filter:blur(16px); color:#fff; box-shadow:0 3px 14px #0002; font-size:12px; }
-.reader-page-jump span { white-space:nowrap; }
-.reader-page-jump input { width:48px; min-width:0; padding:5px; border:1px solid #ffffff40; border-radius:8px; color:#fff; background:#ffffff12; font-size:12px; }
-.reader-page-jump button { padding:5px 8px; color:#fff; border-radius:8px; background:#ffffff20; }
-.reader-page-jump button:disabled { opacity:.45; }
+/* ── Page number pill: Apple-brand black ── */
+.reader-page-jump { position:absolute; top:14px; left:50%; transform:translateX(-50%); z-index:24; display:flex; align-items:center; gap:8px; padding:6px 12px; border:1px solid #ffffff18; border-radius:22px; background:#1c1c1e; backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); color:#fff; box-shadow:0 4px 20px #00000045, inset 0 1px 0 #ffffff15; font-size:12px; font-weight:500; letter-spacing:.01em; }
+.reader-page-jump span { white-space:nowrap; color:rgba(255,255,255,0.88); }
+.reader-page-jump input { width:48px; min-width:0; padding:5px 6px; border:1px solid #ffffff22; border-radius:9px; color:#fff; background:rgba(255,255,255,0.1); font-size:12px; font-weight:500; }
+.reader-page-jump input::placeholder { color:rgba(255,255,255,0.4); }
+.reader-page-jump button { padding:5px 10px; color:#fff; border-radius:9px; background:rgba(255,255,255,0.12); font-weight:600; font-size:12px; transition:background .15s; }
+.reader-page-jump button:hover:not(:disabled) { background:rgba(255,255,255,0.22); }
+.reader-page-jump button:disabled { opacity:.3; }
+
+/* Frosted wheel inspired by the supplied reference. */
+.reader-ring-items::before { background:linear-gradient(140deg,#ffffffa8 0%,#f4f6fbd6 65%,#e7ebf2c9 100%); border:1px solid #fff; backdrop-filter:blur(30px) saturate(125%); -webkit-backdrop-filter:blur(30px) saturate(125%); box-shadow:0 16px 44px #10182736,inset 2px 2px 2px #ffffffed,inset -1px -1px 0 #ffffff90; }
+.reader-tool-ring .reader-ring-tool { background:linear-gradient(145deg,#ffffffed,#f6f8fccc); border:1px solid #ffffffa6; color:#11151c; box-shadow:0 7px 16px #1720331a,inset 0 1px 0 #fff; }
+.reader-tool-ring .reader-ring-tool.active { background:linear-gradient(145deg,#fff9ddf5,#ffec9ce0); border:2px solid #ffce48; color:#151810; box-shadow:0 0 24px #ffd34238,0 6px 16px #17203318; }
+.reader-tool-ring .reader-ring-history button:disabled { background:#f5f7fbb3; color:#aab2bf; }
+.reader-tool-ring .reader-outer-color { box-shadow:0 5px 10px #17203330; border:2px solid white; }
+.reader-tool-ring .reader-ring-toggle { background:linear-gradient(145deg,#363942,#171a20); color:white; border:1px solid #ffffff88; box-shadow:0 8px 18px #17203330,inset 0 1px 1px #ffffff66; }
+.reader-ring-caption { bottom:143px; color:#626c7a; }
+.reader-ring-caption strong { color:#151920; font-size:25px; }
+.reader-ring-caption small { color:#5b6472; }
+.reader-width-range { display:block; appearance:none; -webkit-appearance:none; width:102px; height:5px; margin:15px auto 8px; border:0; border-radius:10px; padding:0; pointer-events:auto; cursor:pointer; }
+.reader-width-range::-webkit-slider-thumb { appearance:none; width:19px; height:19px; border:2px solid white; border-radius:50%; background:#ffcc32; box-shadow:0 2px 6px #17203330; }
+.reader-width-range:focus-visible { outline:2px solid #287de5; outline-offset:7px; }
+.reader-page-jump { gap:6px; padding:7px 9px; border-radius:16px; background:linear-gradient(150deg,#24262bea,#080a0ff0); box-shadow:0 8px 24px #0003,inset 0 1px 0 #ffffff20; max-width:calc(100% - 16px); }
+.reader-page-jump .reader-page-drag { touch-action:none; cursor:grab; color:#adb4bf; padding:6px 4px; background:transparent; display:grid; place-items:center; }
+.reader-page-jump .reader-page-drag:active { cursor:grabbing; }
+.reader-page-jump input { width:42px; }
+.reader-page-jump > button { min-height:30px; }
+
+.reader-tool-ring .reader-ring-toggle:hover:not(:disabled) { background:linear-gradient(145deg,#464a54,#252932); color:white; }
+.reader-corner-layout .pdf-page-container { border:0; padding:0; background:#fff; border-radius:2px; box-shadow:0 4px 18px #17203320; }
+.reader-corner-layout .pdf-page-surface { left:0; top:0; border-radius:0; }
+.reader-corner-layout .reader-selection-status { max-width:calc(100% - 112px); box-sizing:border-box; }
+
+/* Unframed PDF sheets, compact page counter, and contextual formatting. */
+.reader-corner-layout .pdf-page-container { border:0; outline:0; padding:0; border-radius:0; background:white; box-shadow:none; }
+.reader-corner-layout .pdf-page-surface { left:0; top:0; border:0; outline:0; border-radius:0; box-shadow:none; }
+.reader-page-jump { border-radius:24px; }
+.reader-page-jump .reader-page-drag { color:#f4f4f5; padding:4px 8px; white-space:nowrap; font-weight:600; }
+.reader-selection-status .reader-ai-cat:disabled { opacity:1; color:#7257a5; display:flex; align-items:center; gap:6px; background:#f3edff; border-radius:12px; padding:4px 8px; }
+.reader-ai-cat span { display:flex; flex-direction:column; align-items:flex-start; font-size:11px; }
+.reader-ai-cat small { font-size:9px; color:#87769c; }
+
+.reader-page-jump { padding:4px 10px 4px 5px; gap:2px; border:1px solid #ffffff35; border-radius:32px; background:linear-gradient(145deg,#303135f5,#111317f5); box-shadow:0 9px 22px #0003,inset 0 1px 1px #ffffff30; }
+.reader-page-jump .reader-page-cat { display:grid; place-items:center; width:48px; height:48px; padding:0; flex-shrink:0; border-radius:50%; background:radial-gradient(ellipse,#ffce6d40,transparent 70%); }
+.reader-page-cat svg { filter:drop-shadow(0 2px 4px #ffb94655); }
+.reader-page-jump .reader-page-cat:hover { background:radial-gradient(ellipse,#ffca6170,#e087ff20 65%,transparent); }
+.reader-page-jump .reader-page-drag { font-size:14px; padding:5px 9px; }
+.reader-page-jump .reader-page-expand { display:grid; place-items:center; border-left:1px solid #ffffff30; border-radius:0; padding:4px 10px; background:transparent; color:#c8c9cf; }
+.reader-page-jump-entry,.reader-ai-preview { position:absolute; top:calc(100% + 8px); right:0; display:flex; gap:8px; padding:12px; border:1px solid #ffffff25; border-radius:17px; background:#202226f5; box-shadow:0 8px 24px #0003; }
+.reader-ai-preview { width:215px; flex-direction:column; font-size:12px; }
+.reader-ai-preview small { color:#ffd782; }
+.reader-ai-preview span { white-space:normal; }
+
+.reader-page-jump { display:block; width:254px; padding:4px 8px; overflow:hidden; transition:width .25s ease,border-radius .25s ease; }
+.reader-page-jump.is-expanded { width:300px; border-radius:28px; }
+.reader-island-header { display:flex; align-items:center; gap:2px; min-height:50px; }
+.reader-island-header .reader-page-drag { flex:1; }
+.reader-page-jump .reader-page-cat { overflow:hidden; background:transparent; }
+.reader-cat-portrait { display:block; width:48px; height:48px; border-radius:50%; background-image:url('/reader-cat-reference.png'); background-size:560px auto; background-position:-185px -9px; filter:drop-shadow(0 0 4px #ffc56650); }
+.reader-page-jump .reader-page-expand { background:transparent!important; border:0; border-left:1px solid #ffffff30; border-radius:0; }
+.reader-page-jump .reader-page-jump-entry { position:static; display:grid; grid-template-columns:1fr 65px 40px; align-items:center; gap:8px; padding:16px 8px 12px; margin-top:3px; border:0; border-top:1px solid #ffffff20; border-radius:0; background:transparent; box-shadow:none; animation:reader-island-open .22s ease-out; }
+.reader-page-jump-entry label { color:#dadbe0; font-size:12px; }
+.reader-page-jump-entry input { width:100%; box-sizing:border-box; }
+.reader-island-coming { grid-column:1 / -1; display:flex; justify-content:space-between; padding-top:12px; color:#d7d8de; font-size:12px; }
+.reader-island-coming small { color:#e8c889; }
+@keyframes reader-island-open { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
+@media(prefers-reduced-motion:reduce) { .reader-page-jump { transition:none; } .reader-page-jump-entry { animation:none!important; } }
+
+/* Clean numeric field and the reference mascot's happy expression. */
+.reader-page-jump-entry input[type="number"] { appearance:textfield; -moz-appearance:textfield; text-align:center; border-radius:10px; padding:7px 8px; background:#ffffff0b; border:1px solid #ffffff26; color:#fff; outline:none; }
+.reader-page-jump-entry input[type="number"]::-webkit-inner-spin-button,
+.reader-page-jump-entry input[type="number"]::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
+.reader-page-jump-entry input:focus-visible { border-color:#e7c27a; box-shadow:0 0 0 2px #e7c27a20; }
+.reader-page-jump .reader-page-drag:hover:not(:disabled) { background:transparent; }
+.reader-page-jump.is-expanded .reader-cat-portrait { background-size:1100px auto; background-position:-253px -202px; animation:reader-cat-happy .65s ease-out; filter:drop-shadow(0 0 5px #ffc56685); }
+@keyframes reader-cat-happy { 0% { transform:scale(.92) rotate(-7deg); } 35% { transform:translateY(-4px) scale(1.08) rotate(5deg); } 65% { transform:translateY(1px) scale(.98) rotate(-3deg); } 100% { transform:translateY(0) scale(1) rotate(0); } }
+@media(prefers-reduced-motion:reduce) { .reader-page-jump.is-expanded .reader-cat-portrait { animation:none; } }
+
+.reader-island-header .reader-page-drag { display:flex; align-items:center; justify-content:center; gap:4px; min-width:0; }
+.reader-page-jump input.reader-current-page { appearance:textfield; box-sizing:content-box; min-width:1ch; max-width:7ch; padding:3px 4px; border:0; border-radius:5px; background:transparent; color:#fff; font:inherit; text-align:center; outline:none; }
+.reader-page-jump input.reader-current-page:hover { background:#ffffff12; }
+.reader-page-jump input.reader-current-page:focus { background:#ffffff16; box-shadow:none; outline:none; caret-color:#fff; }
+.reader-page-jump input.reader-current-page::selection { background:#fff; color:#000; }
+.reader-page-jump .reader-page-jump-entry { display:block; padding-top:6px; }

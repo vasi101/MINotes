@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import PDFPage from './PDFPage';
+import PageNavigator from './PageNavigator';
 import { clamp, translateMark } from './geometry';
 import { loadPdf, parsePageRange } from './pdf';
 import { getPdfFile } from './storage';
@@ -32,7 +33,6 @@ export default function PDFViewer({docId,onBack,onInsertIntoNote}:Props) {
   const scaleRef=useRef(scale);scaleRef.current=scale;
   const scroller=useRef<HTMLDivElement>(null),pageRefs=useRef<(HTMLDivElement|null)[]>([]);
   const [active,setActive]=useState(new Set([1,2]));
-  const [jumpPage,setJumpPage]=useState('');
   const [current,setCurrent]=useState(doc?.lastPage||1);
   const initialPage=useRef(doc?.lastPage||1),restored=useRef(false);
   const [selectedMarks,setSelectedMarks]=useState<string[]>([]);
@@ -46,8 +46,14 @@ export default function PDFViewer({docId,onBack,onInsertIntoNote}:Props) {
   const [palette,setPalette]=useState(false),[actions,setActions]=useState(false),[extract,setExtract]=useState(false);
   const [range,setRange]=useState(''),[exportError,setExportError]=useState(''),[exporting,setExporting]=useState(false);
   const [marks,setMarks]=useState<PdfMark[]>(doc?.marks||[]);
+  const hasSelectedText = useMemo(() => marks.some(m => selectedMarks.includes(m.id) && m.kind === 'text'), [marks, selectedMarks]);
   const ringWidth = useMemo(() => {
-    if (tool !== 'move' || !selectedMarks.length) return tool === 'marker' ? markerWidth : penWidth;
+    if ((tool !== 'move' && tool !== 'text') || !selectedMarks.length) return tool === 'marker' ? markerWidth : penWidth;
+    const textMarks = marks.filter(mark => selectedMarks.includes(mark.id) && mark.kind === 'text');
+    if (textMarks.length) {
+      const sizesList = textMarks.map(m => Math.round(m.width * (sizes[m.page] || base).w));
+      return Math.round(sizesList.reduce((a, b) => a + b, 0) / sizesList.length);
+    }
     const widths = marks.filter(mark => selectedMarks.includes(mark.id) && mark.kind !== 'highlight').map(mark => Math.round(mark.width * (sizes[mark.page] || base).w));
     if (!widths.length) return penWidth;
     return Math.max(1, Math.min(30, Math.round(widths.reduce((sum, value) => sum + value, 0) / widths.length)));
@@ -70,7 +76,7 @@ export default function PDFViewer({docId,onBack,onInsertIntoNote}:Props) {
     }catch(e){if(!cancelled)setError(e instanceof Error?e.message:'Unable to open PDF.')}})();
     return()=>{cancelled=true;void task?.destroy()};
   },[docId,update]);
-  useEffect(()=>{const root=scroller.current;if(!root)return;const observer=new ResizeObserver(()=>setAvailable(root.clientWidth));observer.observe(root);return()=>observer.disconnect()},[]);
+  useEffect(()=>{const root=scroller.current;if(!root)return;const observer=new ResizeObserver(()=>{const style=getComputedStyle(root);setAvailable(root.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight))});observer.observe(root);return()=>observer.disconnect()},[]);
   const anchor=useRef<{index:number;x:number;y:number;cx:number;cy:number}|null>(null);
   const zoom=useCallback((factor:number,cx?:number,cy?:number)=>{
     const root=scroller.current;if(!root)return;const bounds=root.getBoundingClientRect();
@@ -117,14 +123,14 @@ export default function PDFViewer({docId,onBack,onInsertIntoNote}:Props) {
   },[commit]);
   const changeColor=useCallback((value:string)=>{
     setColor(value);
-    if(tool!=='move'||!selectedMarks.length)return;
+    if((tool!=='move'&&tool!=='text')||!selectedMarks.length)return;
     const selected=new Set(selectedMarks);
     const next=marksRef.current.map(mark=>selected.has(mark.id)&&mark.kind!=='highlight'&&mark.color!==value?{...mark,color:value}:mark);
     if(next.some((mark,i)=>mark!==marksRef.current[i]))commit(next);
   },[tool,selectedMarks,commit]);
   const changeWidth=useCallback((value:number)=>{
-    const nextValue=Math.max(1,Math.min(30,Math.round(value)));
-    if(tool!=='move'||!selectedMarks.length){
+    const nextValue=Math.max(1,Math.min(72,Math.round(value)));
+    if((tool!=='move'&&tool!=='text')||!selectedMarks.length){
       if(tool==='marker')setMarkerWidth(nextValue);else setPenWidth(nextValue);
       return;
     }
@@ -132,15 +138,35 @@ export default function PDFViewer({docId,onBack,onInsertIntoNote}:Props) {
     const next=marksRef.current.map(mark=>{
       if(!selected.has(mark.id)||mark.kind==='highlight')return mark;
       const pageSize=sizes[mark.page]||base;
+      if(mark.kind==='text'){
+        const oldSize=Math.max(8,Math.round(mark.width*pageSize.w));
+        const scale=nextValue/oldSize;
+        const rects=mark.rects.map(r=>({...r,width:r.width*scale,height:r.height*scale}));
+        return {...mark,width:nextValue/pageSize.w,rects};
+      }
       return {...mark,width:nextValue / Math.max(1, pageSize.w)};
     });
     if(next.some((mark,i)=>mark!==marksRef.current[i]))commit(next);
     setMarkerWidth(nextValue);
     setPenWidth(nextValue);
   },[base,commit,selectedMarks,tool,sizes]);
+  const changeTextSize=useCallback((targetSize:number|((current:number)=>number))=>{
+    const selected=new Set(selectedMarks);
+    const next=marksRef.current.map(mark=>{
+      if(!selected.has(mark.id)||mark.kind!=='text')return mark;
+      const pageSize=sizes[mark.page]||base;
+      const currentSize=Math.max(8,Math.round(mark.width*pageSize.w));
+      const nextSize=Math.max(8,Math.min(120,typeof targetSize==='function'?targetSize(currentSize):targetSize));
+      if(nextSize===currentSize)return mark;
+      const scale=nextSize/currentSize;
+      const rects=mark.rects.map(r=>({...r,width:r.width*scale,height:r.height*scale}));
+      return {...mark,width:nextSize/pageSize.w,rects};
+    });
+    if(next.some((mark,i)=>mark!==marksRef.current[i]))commit(next);
+  },[selectedMarks,sizes,base,commit]);
   const erase=useCallback((ids:string[])=>{const next=marksRef.current.filter(mark=>!ids.includes(mark.id));if(next.length!==marksRef.current.length)commit(next)},[commit]);
-  const undo=useCallback(()=>{if(!past.length)return;setFuture(stack=>[...stack,marksRef.current]);const next=past[past.length-1];marksRef.current=next;setMarks(next);setPast(stack=>stack.slice(0,-1))},[past]);
-  const redo=useCallback(()=>{if(!future.length)return;setPast(stack=>[...stack,marksRef.current]);const next=future[future.length-1];marksRef.current=next;setMarks(next);setFuture(stack=>stack.slice(0,-1))},[future]);
+  const undo=useCallback(()=>{if(!past.length)return;const current=marksRef.current;setFuture(stack=>[...stack,current]);const next=past[past.length-1];marksRef.current=next;setMarks(next);setPast(stack=>stack.slice(0,-1))},[past]);
+  const redo=useCallback(()=>{if(!future.length)return;const current=marksRef.current;setPast(stack=>[...stack,current]);const next=future[future.length-1];marksRef.current=next;setMarks(next);setFuture(stack=>stack.slice(0,-1))},[future]);
   useEffect(()=>{
     const handler=(event:KeyboardEvent)=>{
       if(event.isComposing||event.altKey||event.target instanceof HTMLElement&&(event.target.matches('input,textarea,select')||event.target.isContentEditable)||extract)return;
@@ -151,7 +177,16 @@ export default function PDFViewer({docId,onBack,onInsertIntoNote}:Props) {
         if(event.key==='-'){event.preventDefault();zoom(1/1.15)}
         if(event.key==='0'){event.preventDefault();setZoomValue(null)}
         if(event.key.toLowerCase()==='z'){event.preventDefault();if(event.shiftKey)redo();else undo()}
+        if(event.key.toLowerCase()==='y'){event.preventDefault();redo()}
       }else{
+        if(event.key==='Delete'||event.key==='Backspace'){
+          if(selectedMarks.length){
+            event.preventDefault();
+            erase(selectedMarks);
+            setSelectedMarks([]);
+            return;
+          }
+        }
         if(event.key.toLowerCase()==='f'){event.preventDefault();if(!event.repeat){if(!ringLocked)setShowControls(false);setActions(false);setPalette(false);setShowShapes(false);if(fullscreen)void exit();else void enter()}return;}
         if(event.key.toLowerCase()==='t'){
           event.preventDefault();
@@ -173,13 +208,9 @@ export default function PDFViewer({docId,onBack,onInsertIntoNote}:Props) {
   const back=()=>{flush();onBack()};
   if(!doc)return <div><IconButton icon="back" label="Back to library" onClick={onBack}/><p>Document not found.</p></div>;
   const count=pdf?.numPages||doc.pages;
-  return <div ref={element} className={`pdf-viewer reader-corner-layout ${fullscreen?'reader-fullscreen':''}`}>
+  return <div ref={element} className={`pdf-viewer reader-corner-layout ${fullscreen?'reader-fullscreen':''}`} onContextMenu={event=>{event.preventDefault();}}>
     <div className="reader-back-corner"><IconButton icon="back" label="Back to library" onClick={back}/></div>
-    <form className="reader-page-jump" aria-label="Page navigation" onSubmit={event=>{event.preventDefault();const value=Number(jumpPage);if(Number.isInteger(value)&&value>=1&&value<=count){go(value);setJumpPage('')}}}>
-      <span aria-live="polite">Page {current} of {count}</span>
-      <input aria-label="Jump to page" type="number" min={1} max={count} step={1} placeholder="#" value={jumpPage} onChange={event=>setJumpPage(event.target.value)}/>
-      <button type="submit" disabled={!pdf||!jumpPage}>Go</button>
-    </form>
+    <PageNavigator current={current} count={count} ready={!!pdf} onGo={go}/>
     {fullscreenError&&<p className="reader-error" role="alert">{fullscreenError}</p>}
     {actions&&<div className="reader-actions-menu" role="dialog" aria-label="Reading controls">
       <div className="reader-ring-navigation">
@@ -199,7 +230,7 @@ export default function PDFViewer({docId,onBack,onInsertIntoNote}:Props) {
     </div>}
     {error&&<p className="reader-error" role="alert">{error}</p>}
     {exportError&&!extract&&<p className="reader-error" role="alert">{exportError}</p>}
-    <div className="pdf-scroller" ref={scroller} onPointerDown={()=>{setPalette(false);setActions(false);setShowShapes(false);if(!ringLocked)setShowControls(false)}}>
+    <div className="pdf-scroller" ref={scroller} onPointerDown={event=>{if(event.button!==0)return;setPalette(false);setActions(false);setShowShapes(false);if(!ringLocked)setShowControls(false)}}>
       {!pdf&&!error&&<div className="pdf-loading" role="status">Opening PDF...</div>}
       {pdf&&Array.from({length:count},(_,index)=>{
         const page=index+1,size=sizes[page]||base;
@@ -208,10 +239,9 @@ export default function PDFViewer({docId,onBack,onInsertIntoNote}:Props) {
         </div>;
       })}
     </div>
-    {tool==='move'&&marks.some(mark=>selectedMarks.includes(mark.id))&&<div className="reader-selection-status" role="status"><span>{marks.filter(mark=>selectedMarks.includes(mark.id)).length} selected</span><button onClick={copySelected} title="Copy selected annotations">Copy</button><button onClick={pasteSelected} disabled={!hasCopiedMarks} title="Paste copied annotations">Paste</button><button onClick={()=>setSelectedMarks([])}>Clear selection</button></div>}
     <div className={`reader-tool-ring ${showControls?'is-open':''}`}>
       {showControls&&<div className="reader-ring-items" role="toolbar" aria-label="Reader tools" style={{transform:`scale(${Math.min(1,Math.max(.55,(available-32)/420),Math.max(.55,(window.innerHeight-32)/420))})`}}>
-        <RingSettings color={color} onColor={changeColor} width={ringWidth} onWidth={tool==='move'?changeWidth:(tool==='marker'?setMarkerWidth:setPenWidth)} marker={tool==='marker'}/>
+        <RingSettings color={color} onColor={changeColor} width={ringWidth} onWidth={hasSelectedText?changeWidth:(tool==='move'?changeWidth:(tool==='marker'?setMarkerWidth:setPenWidth))} marker={tool==='marker'} isText={hasSelectedText}/>
         {(['text','highlight','ink','erase','move','shapes'] as const).map((value,index)=>{
           const label={text:'Text',highlight:'Highlight',ink:'Pen',erase:'Eraser',move:'Move',shapes:'Shapes'}[value];
           const angle=index*Math.PI/12;
