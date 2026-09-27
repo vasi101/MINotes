@@ -16,6 +16,7 @@
     "prebuild": "node scripts/pdf-assets.mjs"
   },
   "dependencies": {
+    "@excalidraw/excalidraw": "^0.18.1",
     "@fontsource/roboto": "^5.2.0",
     "@tauri-apps/api": "^2.0.0",
     "@tiptap/extension-color": "^3.31.3",

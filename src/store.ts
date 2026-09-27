@@ -36,6 +36,8 @@ export type DrawingPage = {
   displayWidth?: number;
 };
 export type Note = {
+  editor?: 'excalidraw';
+  canvasEmpty?: boolean;
   id: string;
   title: string;
   html: string;

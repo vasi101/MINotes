@@ -1,12 +1,12 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Icon, IconButton } from "./icons";
-import { useStore, dateLabel, type Task } from "./store";
-import EditorScreen from "./EditorScreen";
-import DrawingScreen from "./DrawingScreen";
+import { useStore, type Task } from "./store";
+const CanvasEditor = lazy(() => import("./canvas/CanvasEditor"));
 import FolderHome from "./FolderHome";
+import NoteCard from "./NoteCard";
 import ReaderHome from "./reader/ReaderHome";
 import ReadFolderHome from "./reader/ReadFolderHome";
 import GoogleDriveSheet from "./reader/GoogleDriveSheet";
@@ -60,11 +60,8 @@ export default function App() {
   const [readerDocId, setReaderDocId] = useState<string | null>(null);
   const [readFolder, setReadFolder] = useState("All");
   const [readFolderHome, setReadFolderHome] = useState(false);
-  const [screen, setScreen] = useState<"list" | "editor" | "drawing">("list");
+  const [screen, setScreen] = useState<"list" | "editor">("list");
   const [noteId, setNoteId] = useState("");
-  const [drawingPosition, setDrawingPosition] = useState<number>();
-  const [drawingId, setDrawingId] = useState<string>();
-  const [focusAfterDrawing, setFocusAfterDrawing] = useState(false);
   const [folder, setFolder] = useState("All");
   const [folderHome, setFolderHome] = useState(true);
   const [query, setQuery] = useState("");
@@ -83,9 +80,6 @@ export default function App() {
   }, [theme]);
   const openNote = (id: string) => {
     setFolderHome(false);
-    setDrawingPosition(undefined);
-    setDrawingId(undefined);
-    setFocusAfterDrawing(false);
     setNoteId(id);
     setScreen("editor");
   };
@@ -105,12 +99,7 @@ export default function App() {
         e.preventDefault();
         openNote(addNote(!folderHome && folder !== "All" ? folder : ""));
       }
-      if (
-        e.key === "Escape" &&
-        screen !== "list" &&
-        !document.querySelector("dialog[open]")
-      )
-        setScreen(screen === "drawing" ? "editor" : "list");
+
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -124,7 +113,7 @@ export default function App() {
     )
     .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned));
   return (
-    <div className={`app ${screen === "drawing" ? "drawing-mode" : ""}`}>
+    <div className="app">
       {isTauri() && (
         <div className="window-bar" data-tauri-drag-region>
           <span data-tauri-drag-region>Mi Notes</span>
@@ -295,23 +284,7 @@ export default function App() {
                 <div className={`cards ${tab}`}>
                   {tab === "notes"
                     ? visible.map((n) => (
-                        <button
-                          className="note-card"
-                          key={n.id}
-                          onClick={() => openNote(n.id)}
-                        >
-                          <div>
-                            <h2>
-                              {n.pinned && <Icon name="pin" size={16} />}{" "}
-                              {n.title || "Untitled"}
-                            </h2>
-                            <p>{n.preview || "No text"}</p>
-                            <time>{dateLabel(n.date)}</time>
-                          </div>
-                          {(n.drawings?.[0]?.preview || n.drawingPreview) && (
-                            <img src={n.drawings?.[0]?.preview || n.drawingPreview} alt="Drawing preview" />
-                          )}
-                        </button>
+                        <NoteCard key={n.id} note={n} onOpen={() => openNote(n.id)}/>
                       ))
                     : tasks.map((t) => (
                         <div
@@ -411,39 +384,10 @@ export default function App() {
             )
           )}
           {screen === "editor" && note && (
-            <EditorScreen
-              key={note.id}
-              note={note}
-              onBack={() => setScreen("list")}
-              drawingPosition={drawingPosition}
-              drawingId={drawingId}
-              focusAfterDrawing={focusAfterDrawing}
-              onDraw={(position, existingDrawingId) => {
-                setDrawingPosition(position);
-                setDrawingId(existingDrawingId || crypto.randomUUID());
-                setFocusAfterDrawing(false);
-                setScreen("drawing");
-              }}
-              onOpenReader={(docId) => {
-                setScreen("list");
-                setTab("read");
-                setReaderDocId(docId);
-              }}
-              onNewNote={() =>
-                openNote(addNote(!folderHome && folder !== "All" ? folder : ""))
-              }
-            />
-          )}
-          {screen === "drawing" && note && (
-            <DrawingScreen
-              note={note}
-              drawingId={drawingId}
-              onDone={(savedDrawingId) => {
-                setDrawingId(savedDrawingId);
-                setFocusAfterDrawing(true);
-                setScreen("editor");
-              }}
-            />
+            <Suspense fallback={<p role="status">Loading canvas...</p>}>
+              <CanvasEditor key={note.id} note={note} onBack={() => setScreen("list")}
+                onNewNote={() => openNote(addNote(!folderHome && folder !== "All" ? folder : ""))}/>
+            </Suspense>
           )}
         </motion.main>
       </AnimatePresence>

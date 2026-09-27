@@ -9,3 +9,5 @@ public/pdfjs/
 .env.local
 .env.*.local
 .minotes-auth/
+
+public/excalidraw/

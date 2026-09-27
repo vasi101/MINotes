@@ -1,0 +1,73 @@
+.canvas-editor { height: 100%; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
+.canvas-note-bar { display: grid; grid-template-columns: minmax(44px, 1fr) auto minmax(44px, 1fr); align-items: center; gap: var(--card-gap); padding: 6px var(--page-padding); border-bottom: 1px solid var(--line); flex-shrink: 0; }
+.canvas-note-bar > button { justify-self: start; }
+.canvas-title-wrap { position: relative; width: max-content; min-width: 120px; max-width: min(360px, calc(100vw - 320px)); overflow: hidden; }
+.canvas-title-wrap > span { display: block; visibility: hidden; white-space: pre; font-size: var(--body-size); font-weight: 600; padding: 8px 14px; line-height: 1.4; }
+.canvas-note-bar .canvas-title-wrap input { position: absolute; inset: 0; width: 100%; height: 100%; background: transparent; padding: 8px 14px; font-size: var(--body-size); font-weight: 600; line-height: 1.4; text-align: center; text-overflow: ellipsis; border: 1px solid transparent !important; border-radius: calc(var(--radius-card) / 2); box-shadow: none; backdrop-filter: none !important; }
+.canvas-note-bar .canvas-title-wrap input:focus { border-color: var(--line) !important; background: var(--surface); outline: none; text-overflow: clip; }
+.canvas-save-status { justify-self: end; color: var(--secondary); font-size: var(--meta-size); white-space: nowrap; }
+.canvas-stage { flex: 1; min-height: 0; position: relative; isolation: isolate; }
+.canvas-error { color: var(--danger); padding: 10px var(--page-padding); font-size: 14px; }
+
+/* Supported Excalidraw theme tokens: keep native controls in MINOTE's palette. */
+.canvas-editor .excalidraw {
+  --color-primary: var(--accent);
+  --color-primary-darker: var(--accent);
+  --color-primary-darkest: var(--accent);
+  --color-primary-hover: var(--accent);
+  --color-primary-light: var(--accent-muted);
+  --color-primary-light-darker: var(--accent-muted);
+  --color-selection: var(--accent);
+  --color-brand-active: var(--accent);
+  --color-brand-hover: var(--accent);
+  --color-on-primary-container: var(--accent);
+  --color-surface-primary-container: var(--accent-muted);
+  --color-on-surface: var(--text);
+  --text-primary-color: var(--text);
+  --island-bg-color: color-mix(in srgb, var(--surface) 90%, var(--bg));
+  --popup-bg-color: var(--island-bg-color);
+  --popup-secondary-bg-color: var(--bg);
+  --popup-text-color: var(--text);
+  --default-bg-color: var(--bg);
+  --input-bg-color: var(--bg);
+  --input-border-color: var(--line);
+  --input-label-color: var(--text);
+  --color-surface-lowest: var(--bg);
+  --color-surface-low: var(--surface);
+  --color-surface-mid: var(--surface);
+  --color-surface-high: var(--line);
+  --default-border-color: var(--line);
+  --sidebar-border-color: var(--line);
+  --border-radius-lg: var(--radius-card);
+  --border-radius-md: calc(var(--radius-card) / 2);
+  --editor-container-padding: var(--page-padding);
+}
+.canvas-editor .excalidraw .HintViewer { display: none; }
+/* Excalidraw 0.18.1 has no public Library visibility option. Scope this to
+   its Library trigger wrapper, including the otherwise focusable checkbox. */
+.canvas-stage .sidebar-trigger__label-element:has(.default-sidebar-trigger) { display: none; }
+
+/* Reset host form chrome only. Excalidraw owns inline text color, font,
+   coordinates, zoom and its dark-mode --theme-filter. */
+.canvas-editor .excalidraw textarea.excalidraw-wysiwyg {
+  background: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  caret-color: currentColor;
+  -webkit-text-fill-color: currentColor;
+}
+.canvas-editor .excalidraw textarea.excalidraw-wysiwyg::selection {
+  background: rgba(127, 127, 127, .4);
+}
+@media (max-width: 600px) {
+  .canvas-note-bar { gap: 4px; padding: 6px; }
+  .canvas-title-wrap { max-width: min(360px, calc(100vw - 136px)); min-width: min(120px, calc(100vw - 136px)); }
+  .canvas-note-bar .canvas-title-wrap input, .canvas-title-wrap > span { font-size: 16px; }
+  .canvas-save-status { display: none; }
+}

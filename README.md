@@ -2,24 +2,16 @@
 
 Mi Notes is a Windows desktop notes app built with React, TypeScript, Vite, and Tauri 2.
 
-It combines notes, tasks, folders, a rich text editor, drawing tools, and a PDF reader in one local-first app.
+It combines notes, tasks, folders, an Excalidraw note canvas, and a PDF reader in one local-first app.
 
 ## Features
 
 - Notes with folders, search, pinning, trash, and light/dark themes.
-- Rich text editing with headings, bold, italic, underline, lists, quotes, images, and PDF page inserts.
-- Word-style editor shortcuts:
-  - `Ctrl/Cmd+B` bold
-  - `Ctrl/Cmd+I` italic
-  - `Ctrl/Cmd+U` underline
-  - `Ctrl/Cmd+Z` undo
-  - `Ctrl/Cmd+Y` or `Ctrl/Cmd+Shift+Z` redo
-  - `Ctrl/Cmd+Shift+7` numbered list
-  - `Ctrl/Cmd+Shift+8` bullet list
-  - `Ctrl/Cmd+Alt+1/2/3` headings
-  - `Ctrl/Cmd+S` save
-  - `Ctrl/Cmd+N` new note
-- Drawing canvases with pencil, brush, marker, fountain pen, eraser, image import, image transforms, resizable previews, and cropped exports.
+- Excalidraw is the primary note editor, with native fonts, text, pen, shapes, arrows, images, and undo/redo.
+- Independent scenes and image files autosave per note in IndexedDB. Native fonts are bundled for offline desktop use.
+- Use the native Text tool (`T`) and click anywhere on the canvas. On finishing text editing (Escape, Ctrl/Cmd+Enter, or clicking away), `# `, `## `, and `### ` become H1/H2/H3 text with the prefix removed. `- ` or `* ` becomes a bullet. Enter continues bullets and numbered lists inside the native text editor; Enter on an empty item exits. Native Tab/Shift+Tab indentation is preserved. No separate text input or editing panel is used.
+- Each native text block remains an Excalidraw element, including multiline lists. Numbering continues while typing; moving or deleting elements later does not automatically renumber the canvas. A heading applies to its whole native text block.
+- `Ctrl/Cmd+S` saves locally; `Ctrl/Cmd+N` creates a note. Excalidraw's menu provides scene import/export. Canvas tables, tasks, and sticky notes are deferred.
 - PDF library with folder imports, thumbnails, page navigation, annotations, favourites, To Read, and PDF export.
 - Imported folder synchronization: new or changed PDFs are detected without modifying the original files. The app stores private copies and keeps app annotations separate.
 - Windows pinch/zoom hotkeys enabled through Tauri.
@@ -105,3 +97,27 @@ Notes, tasks, settings, PDF metadata, annotations, and imported PDF copies are s
 ## Google Drive folders
 
 Connect directly to Google Drive from the browser or Windows app under **Read ? Add ? Google Drive**. See [Google Drive setup](GOOGLE_DRIVE_SETUP.md) for the one-time OAuth configuration, refresh behavior, and development requirements.
+
+## Canvas storage and migration
+
+Note metadata remains in `minotes-v1` localStorage. Excalidraw elements, durable view/tool settings, and binary image data are stored atomically by note ID in the `minotes-scenes` IndexedDB database (`notes` object store). Selection and editing state are not restored. Pending saves finish before navigating back or closing the desktop window; save errors are shown in the editor.
+
+Existing note text and embedded data-URL images are imported on first open. Old drawing previews become movable images. Original HTML and drawing fields remain intact in metadata; complex legacy blocks are not converted into editable equivalents. The redundant old note editor and drawing-screen components have been removed.
+
+The integration uses the [official Excalidraw React API](https://docs.excalidraw.com/docs/@excalidraw/excalidraw/integration). Run `npx playwright test tests/canvas-editor.spec.ts tests/fresh-install.spec.ts` for native T-tool headings, list continuation, indentation, dark/light inline-editor contrast, images, movement/undo, and reload coverage.
+
+### Native text integration (Excalidraw 0.18.1)
+
+The public `onChange` API and `appState.editingTextElement` identify the end of native text editing. Heading and bullet transformations use `newElementWith` and `updateScene` after Excalidraw captures its own submit history. IDs, coordinates, selected font/color, group bindings, and element identity remain intact. Undoing formatting does not immediately reapply it.
+
+Version 0.18.1 has no public character-input or Enter callback. A small, canvas-scoped Enter handler operates only on the existing `.excalidraw-wysiwyg` textarea to insert list markers, then dispatches the normal input event so Excalidraw owns text updates and measurement. It skips IME composition, modified Enter, and selected ranges. Native Tab/Shift+Tab remains untouched. This version-specific bridge is covered by browser tests and should be rechecked when upgrading Excalidraw; it never creates or replaces an editor.
+
+MINOTE colors, surfaces, spacing, and radii are mapped through Excalidraw CSS variables. A narrowly scoped WYSIWYG reset removes leaked global form borders, padding, background, and backdrop blur; it intentionally preserves Excalidraw's inline stroke color and dark-mode rendering filter.
+
+### Canvas title and note previews
+
+The title grows with its text between 120px and 360px (constrained on small windows), stays centered in the window, and finishes editing on Enter. Excalidraw 0.18.1 has no public Library visibility setting, so a canvas-scoped rule hides its trigger wrapper without modifying scene support or essential tools.
+
+Note cards show the actual canvas, title and modified date. Native `exportToBlob` renders content bounds with padding and embedded image files, capped at 600px. Preview generation is debounced after saves and flushed when leaving. Light and dark PNG blobs are cached separately in the `minotes-previews` IndexedDB database; they never replace editable scenes. Opening the grid only reads cached previews. Empty notes and uncached scenes use themed placeholders until the next normal editor save.
+
+Run `npx playwright test tests/canvas-editor.spec.ts tests/canvas-previews.spec.ts tests/fresh-install.spec.ts` to verify native editing, theme contrast, compact title, cached previews, responsive cards and scene persistence.

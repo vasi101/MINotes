@@ -2,6 +2,8 @@
 
 ## Desktop sign-in
 
+For GitHub releases, set repository Actions secrets `GOOGLE_DESKTOP_CLIENT_ID` and `GOOGLE_DESKTOP_CLIENT_SECRET` to the same desktop client values. The release workflow passes them to the native build and stops if either is missing. Local `.env.local` files are not uploaded to GitHub.
+
 The app developer configures a Google OAuth **Desktop app** client once. Set `GOOGLE_DESKTOP_CLIENT_ID` and `GOOGLE_DESKTOP_CLIENT_SECRET` in `.env.local`, using the desktop client's values. Enable the Drive API and add test users in Google Cloud while the app is in Testing. Restart `npm run tauri dev` (or build with `npm run tauri build`) after changing these values; they are included in the native build. Never use a Web application client secret here. Desktop OAuth clients are public clients, so these bundled values are not confidential credentials.
 
 Users select **Continue with Google**, sign in through their system browser, and return to Mi Notes. They do not upload JSON. Existing locally configured desktop clients remain supported. A build without OAuth configuration shows sign-in as unavailable, rather than asking users to configure Google Cloud.

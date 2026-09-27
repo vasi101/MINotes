@@ -317,7 +317,51 @@ fn random() -> Result<String, String> {
     getrandom::fill(&mut bytes).map_err(|_| "Cannot generate secure sign-in state.")?;
     Ok(URL_SAFE_NO_PAD.encode(bytes))
 }
-fn wait_for_code(listener: TcpListener, expected: String) -> Result<String, String> {
+fn focus_app(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}
+fn return_page(stream: &mut std::net::TcpStream, token: &str) {
+    let body = include_str!("google-return.html").replace("__RETURN_TOKEN__", token);
+    let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
+    let _ = write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nContent-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{}", body.len(), body);
+}
+// Keep a short-lived loopback endpoint alive after OAuth finishes. A random path
+// permits only this sign-in tab to request focus, without registering a protocol.
+fn serve_return(listener: TcpListener, token: String, app: tauri::AppHandle) {
+    std::thread::spawn(move || {
+        let start = Instant::now();
+        let expected = format!("GET /return/{token} HTTP/1.1");
+        while start.elapsed() < Duration::from_secs(600) {
+            match listener.accept() {
+                Ok((mut stream, _)) => {
+                    let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
+                    let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
+                    let mut bytes = Vec::new();
+                    let mut buffer = [0u8; 1024];
+                    while bytes.len() < 8192 && !bytes.windows(4).any(|p| p == b"\r\n\r\n") {
+                        match stream.read(&mut buffer) {
+                            Ok(0) | Err(_) => break,
+                            Ok(count) => bytes.extend_from_slice(&buffer[..count]),
+                        }
+                    }
+                    if String::from_utf8_lossy(&bytes).lines().next() == Some(expected.as_str()) {
+                        focus_app(&app);
+                        return_page(&mut stream, &token);
+                    } else {
+                        let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
+                    }
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => std::thread::sleep(Duration::from_millis(100)),
+                Err(_) => break,
+            }
+        }
+    });
+}
+fn wait_for_code(listener: TcpListener, expected: String, app: tauri::AppHandle) -> Result<String, String> {
     listener.set_nonblocking(true).map_err(|e| e.to_string())?;
     let start = Instant::now();
     while start.elapsed() < Duration::from_secs(180) {
@@ -349,8 +393,10 @@ fn wait_for_code(listener: TcpListener, expected: String) -> Result<String, Stri
                     let _ = stream.write_all(b"HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
                     continue;
                 }
-                let body = "You can close this tab and return to Mi Notes.";
-                let _ = write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nCache-Control: no-store\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{}", body.len(), body);
+                let return_token = random()?;
+                return_page(&mut stream, &return_token);
+                serve_return(listener, return_token, app.clone());
+                focus_app(&app);
                 if params.contains_key("error") {
                     return Err("Google Drive sign-in was cancelled or denied.".into());
                 }
@@ -406,7 +452,8 @@ pub async fn drive_connect(app: tauri::AppHandle) -> Result<Value, String> {
         ("prompt", "consent select_account"),
     ]);
     tauri::async_runtime::spawn_blocking(move || powershell("$ErrorActionPreference='Stop'; $u=[Console]::In.ReadToEnd(); Start-Process -FilePath $u", authorization.as_str())).await.map_err(|e| e.to_string())??;
-    let code = tauri::async_runtime::spawn_blocking(move || wait_for_code(listener, state))
+    let callback_app = app.clone();
+    let code = tauri::async_runtime::spawn_blocking(move || wait_for_code(listener, state, callback_app))
         .await
         .map_err(|e| e.to_string())??;
     let response = http()?
