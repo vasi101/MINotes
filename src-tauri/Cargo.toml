@@ -1,6 +1,6 @@
 [package]
 name = "minotes"
-version = "0.1.2"
+version = "0.1.3"
 description = "Mi Notes inspired desktop notebook"
 edition = "2021"
 
