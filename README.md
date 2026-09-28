@@ -94,6 +94,10 @@ The installers are currently **unsigned**, and the release description states th
 
 Notes, tasks, settings, PDF metadata, annotations, and imported PDF copies are stored locally. Folder synchronization reads source folders and never writes changes back to the original files. Removing the app does not necessarily remove browser/WebView local data; manage that separately if a full reset is required.
 
+## Kitty reading assistant
+
+Select text in notes or PDFs and right-click **Ask Kitty** to define, translate, explain, simplify, summarize, or ask a question. Short definitions use a cached dictionary first; local AI handles fallback and explicit AI actions. See [Kitty setup and behavior](KITTY.md) to configure local models and English ↔ Nepali translation.
+
 ## Google Drive folders
 
 Connect directly to Google Drive from the browser or Windows app under **Read ? Add ? Google Drive**. See [Google Drive setup](GOOGLE_DRIVE_SETUP.md) for the one-time OAuth configuration, refresh behavior, and development requirements.
@@ -121,3 +125,5 @@ The title grows with its text between 120px and 360px (constrained on small wind
 Note cards show the actual canvas, title and modified date. Native `exportToBlob` renders content bounds with padding and embedded image files, capped at 600px. Preview generation is debounced after saves and flushed when leaving. Light and dark PNG blobs are cached separately in the `minotes-previews` IndexedDB database; they never replace editable scenes. Opening the grid only reads cached previews. Empty notes and uncached scenes use themed placeholders until the next normal editor save.
 
 Run `npx playwright test tests/canvas-editor.spec.ts tests/canvas-previews.spec.ts tests/fresh-install.spec.ts` to verify native editing, theme contrast, compact title, cached previews, responsive cards and scene persistence.
+
+Dictionary definitions are provided by [FreeDictionaryAPI.com](https://freedictionaryapi.com), sourced from [Wiktionary](https://en.wiktionary.org) under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Each dictionary result links to its original entry.

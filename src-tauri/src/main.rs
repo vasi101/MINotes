@@ -1,9 +1,13 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod drive;
+mod kitty;
 fn main() {
     tauri::Builder::default()
         .manage(drive::DriveState::default())
+        .manage(kitty::KittyState::default())
         .invoke_handler(tauri::generate_handler![
+            kitty::kitty_request,
+            kitty::kitty_dictionary,
             drive::drive_status,
             drive::drive_configure,
             drive::drive_connect,

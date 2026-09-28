@@ -24,10 +24,11 @@
                                 }
                             ],
                 "security":  {
-                                 "csp":  "default-src \u0027self\u0027; script-src \u0027self\u0027; style-src \u0027self\u0027 \u0027unsafe-inline\u0027; img-src \u0027self\u0027 asset: http://asset.localhost blob: data:; font-src \u0027self\u0027 data:; connect-src \u0027self\u0027 ipc: http://ipc.localhost; worker-src \u0027self\u0027 blob:"
+                                 "csp":  "default-src \u0027self\u0027; script-src \u0027self\u0027; style-src \u0027self\u0027 \u0027unsafe-inline\u0027; img-src \u0027self\u0027 asset: http://asset.localhost blob: data:; font-src \u0027self\u0027 data:; connect-src \u0027self\u0027 ipc: http://ipc.localhost https://freedictionaryapi.com; media-src \u0027self\u0027 https://freedictionaryapi.com; worker-src \u0027self\u0027 blob:"
                              }
             },
     "bundle":  {
+                   "resources": { "resources/kitty-runtime/": "kitty-runtime/" },
                    "active":  true,
                    "targets":  [
                                    "nsis",

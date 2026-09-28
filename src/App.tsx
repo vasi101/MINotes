@@ -12,6 +12,8 @@ import ReadFolderHome from "./reader/ReadFolderHome";
 import GoogleDriveSheet from "./reader/GoogleDriveSheet";
 import { startDriveBackgroundSync, useDriveSync } from "./reader/googleDrive";
 import PDFViewer from "./reader/PDFViewer";
+import Kitty from './kitty/Kitty';
+import KittySettings from './kitty/KittySettings';
 
 export function Sheet({
   title,
@@ -392,9 +394,11 @@ export default function App() {
         </motion.main>
       </AnimatePresence>
       {profileOpen && <GoogleDriveSheet profile basePath="" onClose={() => setProfileOpen(false)} onBusy={() => {}}/>}
+      <Kitty scope={`${screen}:${tab}:${noteId}:${readerDocId ?? ''}`}/>
 
       {panel === "settings" && (
         <Sheet title="Settings" onClose={() => setPanel(null)}>
+          <KittySettings/>
           <label className="setting-row">
             Appearance
             <select

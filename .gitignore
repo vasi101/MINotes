@@ -11,3 +11,4 @@ public/pdfjs/
 .minotes-auth/
 
 public/excalidraw/
+src-tauri/resources/kitty-runtime/

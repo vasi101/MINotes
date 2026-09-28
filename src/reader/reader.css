@@ -122,6 +122,14 @@
 }
 .reader-corner-layout .pdf-page-surface { left:6px; top:6px; border-radius:15px; }
 .reader-back-corner { position:absolute; top:12px; left:12px; z-index:30; }
+.reader-kitty-panel { border-top:1px solid #ffffff20; color:#f4f5fa; padding:14px 8px; font-size:14px; line-height:1.5; text-align:left; }
+.reader-kitty-panel header,.reader-kitty-panel label { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.reader-kitty-panel button { color:inherit; background:#292d39; border:0; border-radius:10px; padding:7px 12px; cursor:pointer; }
+.reader-kitty-panel header button { padding:0 8px; font-size:22px; background:transparent; }
+.reader-kitty-panel>button { display:flex; justify-content:space-between; width:100%; margin-bottom:14px; }
+.reader-kitty-panel p { margin:12px 0; }
+.reader-kitty-panel .reader-kitty-hint { font-size:12px; color:#b1b8ca; margin-bottom:0; }
+.reader-kitty-panel :focus-visible { outline:2px solid #aaa4ff; outline-offset:3px; }
 .reader-back-corner .icon-button { width:44px; height:44px; background:#fffffff2; color:#343434; box-shadow:0 3px 14px #0002; }
 .reader-tool-ring { position:absolute; right:max(20px,env(safe-area-inset-right)); bottom:max(20px,env(safe-area-inset-bottom)); width:56px; height:56px; z-index:25; }
 .reader-ring-items { position:absolute; right:0; bottom:0; width:236px; height:236px; pointer-events:none; }
@@ -329,3 +337,10 @@
 .reader-page-jump input.reader-current-page:focus { background:#ffffff16; box-shadow:none; outline:none; caret-color:#fff; }
 .reader-page-jump input.reader-current-page::selection { background:#fff; color:#000; }
 .reader-page-jump .reader-page-jump-entry { display:block; padding-top:6px; }
+
+/* Compact page pill; the cat opens the chat in this same surface. */
+.reader-page-jump:not(.is-expanded) { width:220px; padding:3px 6px; border-radius:25px; }
+.reader-page-jump:not(.is-expanded) .reader-island-header { min-height:38px; }
+.reader-page-jump:not(.is-expanded) .reader-page-cat { width:36px; height:36px; }
+.reader-page-jump:not(.is-expanded) .reader-cat-portrait { transform:scale(.75); flex-shrink:0; }
+.reader-page-jump:not(.is-expanded) .reader-page-drag { font-size:12px; padding:3px 5px; }

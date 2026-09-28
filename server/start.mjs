@@ -3,12 +3,13 @@ import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { resolve, extname, sep } from 'node:path';
 import { createGoogleAuth } from './google-auth.mjs';
+import { kittyMiddleware } from './kitty/http.mjs';
 
 const root = resolve('dist');
 const auth = createGoogleAuth();
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.woff': 'font/woff', '.woff2': 'font/woff2', '.wasm': 'application/wasm', '.pdf': 'application/pdf' };
 const server = createServer((req, res) => {
-  void auth(req, res, () => { void serve(req, res); });
+  void auth(req, res, () => kittyMiddleware(req, res, () => { void serve(req, res); }));
 });
 async function serve(req, res) {
   try {

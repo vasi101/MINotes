@@ -16,7 +16,7 @@ import ShapePicker,{ShapeIcon} from '../ShapePicker';
 import {isShape} from '../shapes';
 import {useReaderFullscreen} from './useReaderFullscreen';
 const EMPTY_MARKS: PdfMark[] = [];
-const TOOL_KEYS: Record<ReaderTool,string> = {text:'',highlight:'H',marker:'M',ink:'P',erase:'E',move:'G','rounded-rectangle':'R',circle:'C',oval:'O',line:'L',triangle:'',diamond:''};
+const TOOL_KEYS: Record<ReaderTool,string> = {select:'V',text:'',highlight:'H',marker:'M',ink:'P',erase:'E',move:'G','rounded-rectangle':'R',circle:'C',oval:'O',line:'L',triangle:'',diamond:''};
 interface Props { docId: string; onBack: () => void; onInsertIntoNote?: (id:string,page:number,marks:PdfMark[]) => void }
 export default function PDFViewer({docId,onBack,onInsertIntoNote}:Props) {
   const {element,fullscreen,fullscreenError,enter,exit}=useReaderFullscreen();
@@ -41,7 +41,7 @@ export default function PDFViewer({docId,onBack,onInsertIntoNote}:Props) {
   const selectMarks=useCallback((ids:string[],mode:'replace'|'add'|'toggle'='replace')=>{
     setSelectedMarks(previous=>mode==='replace'?ids:mode==='add'?[...new Set([...previous,...ids])]:[...previous.filter(id=>!ids.includes(id)),...ids.filter(id=>!previous.includes(id))]);
   },[]);
-  const [tool,setTool]=useState<ReaderTool>('highlight'),[color,setColor]=useState(highlightColors[3]);
+  const [tool,setTool]=useState<ReaderTool>('select'),[color,setColor]=useState(highlightColors[3]);
   const [penWidth,setPenWidth]=useState(3),[markerWidth,setMarkerWidth]=useState(18);
   const [palette,setPalette]=useState(false),[actions,setActions]=useState(false),[extract,setExtract]=useState(false);
   const [range,setRange]=useState(''),[exportError,setExportError]=useState(''),[exporting,setExporting]=useState(false);
@@ -196,7 +196,7 @@ export default function PDFViewer({docId,onBack,onInsertIntoNote}:Props) {
         if(event.key==='PageDown'){event.preventDefault();go(Math.min(current+1,pdf?.numPages||1))}
         if(event.key==='PageUp'){event.preventDefault();go(Math.max(current-1,1))}
         if(event.key==='Escape'){setPalette(false);setActions(false);setShowShapes(false);if(!ringLocked)setShowControls(false);setTool('text');setSelectedMarks([])}
-        const shortcuts:Record<string,ReaderTool>={h:'highlight',m:'marker',p:'ink',e:'erase',g:'move',r:'rounded-rectangle',c:'circle',o:'oval',l:'line'};
+        const shortcuts:Record<string,ReaderTool>={v:'select',h:'highlight',m:'marker',p:'ink',e:'erase',g:'move',r:'rounded-rectangle',c:'circle',o:'oval',l:'line'};
         if(shortcuts[event.key.toLowerCase()]){event.preventDefault();setTool(shortcuts[event.key.toLowerCase()]);setShowShapes(false);if(!ringLocked)setShowControls(false);setPalette(false);setActions(false)}
       }
     };window.addEventListener('keydown',handler);return()=>window.removeEventListener('keydown',handler);
@@ -210,7 +210,7 @@ export default function PDFViewer({docId,onBack,onInsertIntoNote}:Props) {
   const count=pdf?.numPages||doc.pages;
   return <div ref={element} className={`pdf-viewer reader-corner-layout ${fullscreen?'reader-fullscreen':''}`} onContextMenu={event=>{event.preventDefault();}}>
     <div className="reader-back-corner"><IconButton icon="back" label="Back to library" onClick={back}/></div>
-    <PageNavigator current={current} count={count} ready={!!pdf} onGo={go}/>
+    <PageNavigator current={current} count={count} ready={!!pdf} onGo={go} selecting={tool==='select'} onSelectText={()=>{setTool('select');setSelectedMarks([]);setShowControls(false)}}/>
     {fullscreenError&&<p className="reader-error" role="alert">{fullscreenError}</p>}
     {actions&&<div className="reader-actions-menu" role="dialog" aria-label="Reading controls">
       <div className="reader-ring-navigation">

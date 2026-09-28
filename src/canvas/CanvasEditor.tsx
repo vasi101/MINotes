@@ -12,6 +12,7 @@ import { schedulePreview, flushPreview, meaningfulElements } from './previews';
 import { continueNativeList, nativeTextLifecycle } from './nativeText';
 import { isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { connectKittyCanvas } from '../kitty/canvasBridge';
 
 declare global { interface Window { EXCALIDRAW_ASSET_PATH: string; } }
 window.EXCALIDRAW_ASSET_PATH = '/excalidraw/';
@@ -21,6 +22,7 @@ export default function CanvasEditor({ note, onBack, onNewNote }: { note: Note; 
   const updateNote = useStore(state => state.updateNote);
   const [initial, setInitial] = useState<NoteScene>();
   const [api, setApi] = useState<ExcalidrawImperativeAPI>();
+  useEffect(() => { if (api) return connectKittyCanvas(api); }, [api]);
   const [status, setStatus] = useState('Loading canvas…');
   const [error, setError] = useState('');
   const last = useRef('');
