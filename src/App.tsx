@@ -394,7 +394,7 @@ export default function App() {
         </motion.main>
       </AnimatePresence>
       {profileOpen && <GoogleDriveSheet profile basePath="" onClose={() => setProfileOpen(false)} onBusy={() => {}}/>}
-      <Kitty scope={`${screen}:${tab}:${noteId}:${readerDocId ?? ''}`}/>
+      <Kitty scope={`${screen}:${tab}:${noteId}:${readerDocId ?? ''}`} allowAI={tab === "read"}/>
 
       {panel === "settings" && (
         <Sheet title="Settings" onClose={() => setPanel(null)}>

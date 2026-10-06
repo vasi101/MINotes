@@ -18,7 +18,7 @@ import type { DictionaryResult } from "./types";
 import "./kitty.css";
 
 // Selection capture remains shared with the canvas and PDF reader.
-export default function Kitty({ scope }: { scope: string }) {
+export default function Kitty({ scope, allowAI }: { scope: string; allowAI: boolean }) {
   const askOnSelection = useKittySettings((s) => s.askOnSelection);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiResponse, setAiResponse] = useState<KittyResponse>();
@@ -178,6 +178,7 @@ export default function Kitty({ scope }: { scope: string }) {
       }
     };
     const readerAsk = (event: Event) => {
+      if (!allowAI) return;
       const next = (event as CustomEvent<KittySelection>).detail;
       if (
         !next ||
@@ -220,7 +221,7 @@ export default function Kitty({ scope }: { scope: string }) {
       document.removeEventListener("keydown", key, true);
       document.removeEventListener("scroll", scroll, true);
     };
-  }, [scope, askOnSelection]);
+  }, [scope, askOnSelection, allowAI]);
 
   const run = async () => {
     if (!selection) return;
@@ -262,7 +263,7 @@ export default function Kitty({ scope }: { scope: string }) {
     asked?: string,
     previousAnswer?: string,
   ) => {
-    if (!selection) return;
+    if (!allowAI || !selection) return;
     service.current ??= new DictionaryService();
     if (!controller.current) {
       const runtime = new ManagedRuntime(useKittySettings.getState);
@@ -322,6 +323,7 @@ export default function Kitty({ scope }: { scope: string }) {
     );
   };
   const openAsk = () => {
+    if (!allowAI) return;
     closeAI();
     session.current++;
     setPopup(undefined);
@@ -463,39 +465,43 @@ export default function Kitty({ scope }: { scope: string }) {
                   </span>
                   <span>Meaning</span>
                 </button>
-                <button onClick={() => runAI("EXPLAIN")}>
-                  <span aria-hidden="true" className="kitty-action-symbol">
-                    ?
-                  </span>
-                  <span>Explain</span>
-                </button>
-                <button onClick={() => runAI("SUMMARIZE")}>
-                  <span aria-hidden="true" className="kitty-action-symbol">
-                    &#8801;
-                  </span>
-                  <span>Summarize</span>
-                </button>
-                <button onClick={() => runAI("SIMPLIFY")}>
-                  <span aria-hidden="true" className="kitty-action-symbol">
-                    &#8722;
-                  </span>
-                  <span>Simplify</span>
-                </button>
-                <button onClick={() => runAI("TRANSLATE")}>
-                  <span aria-hidden="true" className="kitty-action-symbol">
-                    A&#8644;
-                  </span>
-                  <span>Translate</span>
-                </button>
-                <button className="kitty-ask-action" onClick={openAsk}>
-                  <span aria-hidden="true" className="kitty-action-symbol">
-                    &#10023;
-                  </span>
-                  <span>Ask AI</span>
-                  <span aria-hidden="true" className="kitty-action-arrow">
-                    &#8599;
-                  </span>
-                </button>
+                {allowAI && (
+                  <>
+                    <button onClick={() => runAI("EXPLAIN")}>
+                      <span aria-hidden="true" className="kitty-action-symbol">
+                        ?
+                      </span>
+                      <span>Explain</span>
+                    </button>
+                    <button onClick={() => runAI("SUMMARIZE")}>
+                      <span aria-hidden="true" className="kitty-action-symbol">
+                        &#8801;
+                      </span>
+                      <span>Summarize</span>
+                    </button>
+                    <button onClick={() => runAI("SIMPLIFY")}>
+                      <span aria-hidden="true" className="kitty-action-symbol">
+                        &#8722;
+                      </span>
+                      <span>Simplify</span>
+                    </button>
+                    <button onClick={() => runAI("TRANSLATE")}>
+                      <span aria-hidden="true" className="kitty-action-symbol">
+                        A&#8644;
+                      </span>
+                      <span>Translate</span>
+                    </button>
+                    <button className="kitty-ask-action" onClick={openAsk}>
+                      <span aria-hidden="true" className="kitty-action-symbol">
+                        &#10023;
+                      </span>
+                      <span>Ask AI</span>
+                      <span aria-hidden="true" className="kitty-action-arrow">
+                        &#8599;
+                      </span>
+                    </button>
+                  </>
+                )}
               </div>
             </section>
           )}
@@ -602,7 +608,7 @@ export default function Kitty({ scope }: { scope: string }) {
         document.fullscreenElement ?? document.body,
       )}
       {createPortal(
-        aiOpen && (
+          allowAI && aiOpen && (
           <KittyIsland
             status={aiStatus}
             pending={pending}

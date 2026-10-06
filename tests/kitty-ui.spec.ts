@@ -60,7 +60,7 @@ async function savedText(page: Page) {
   });
 }
 
-test("selection menu never generates; explicit AI answers insert and save", async ({
+test("note selection offers dictionary only and ignores AI chat", async ({
   page,
 }) => {
   await configure(page, true);
@@ -72,80 +72,30 @@ test("selection menu never generates; explicit AI answers insert and save", asyn
   });
   await page.route("**/api/kitty/generate", (route) => {
     ai++;
-    return route.fulfill({
-      contentType: "application/x-ndjson",
-      body: JSON.stringify({
-        result: { text: "The management of relations between countries." },
-      }),
-    });
+    return route.fulfill({ status: 500, body: "AI is unavailable in Notes" });
   });
   const input = await openText(page);
   await input.dispatchEvent("keyup", { key: "Shift" });
-  await expect(
-    page.getByRole("region", { name: "Selection menu" }),
-  ).toBeVisible();
-  expect(dictionary).toBe(0);
-  expect(ai).toBe(0);
-  await page.getByRole("button", { name: "Explain", exact: true }).click();
-  const island = page.getByRole("region", { name: "Kitty answer" });
-  await expect(island).toContainText(
-    "The management of relations between countries.",
+  const menu = page.getByRole("region", { name: "Selection menu" });
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole("button", { name: "Meaning" })).toBeVisible();
+  for (const action of ["Explain", "Summarize", "Simplify", "Translate", "Ask AI"]) {
+    await expect(menu.getByRole("button", { name: action, exact: true })).toHaveCount(0);
+  }
+  await page.evaluate(() =>
+    window.dispatchEvent(
+      new CustomEvent("minotes:open-kitty-chat", {
+        detail: { text: "diplomacy" },
+      }),
+    ),
   );
-  expect(dictionary).toBe(0);
-  expect(ai).toBe(1);
-  await island.getByLabel("More answer options").click();
-  await island.getByRole("button", { name: "Insert into note" }).click();
-  await expect(island).toContainText("Inserted into your note");
-  await expect
-    .poll(() => savedText(page))
-    .toContain("The management of relations between countries.");
-  await island.getByRole("button", { name: "Save as note" }).click();
-  await expect(island).toContainText("Saved as a new note");
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () =>
-          JSON.parse(localStorage.getItem("minotes-v1")!).state.notes.length,
-      ),
-    )
-    .toBe(2);
-});
-
-test("dictionary miss never calls AI; explicit translation can replace selected text", async ({
-  page,
-}) => {
-  await configure(page);
-  const requests: any[] = [];
-  await page.route("https://freedictionaryapi.com/**", (route) =>
-    route.fulfill({ status: 404, json: {} }),
-  );
-  await page.route("**/api/kitty/generate", (route) => {
-    requests.push(route.request().postDataJSON());
-    return route.fulfill({
-      contentType: "application/x-ndjson",
-      body: JSON.stringify({ result: { text: "Translated text." } }),
-    });
-  });
-  let input = await openText(page, "xyzabc");
-  await input.click({ button: "right" });
-  await page.getByRole("button", { name: "Meaning", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Kitty answer" })).toHaveCount(0);
+  await menu.getByRole("button", { name: "Meaning", exact: true }).click();
   await expect(
     page.getByRole("region", { name: "Dictionary meaning" }),
-  ).toContainText("No definition found");
-  expect(requests).toHaveLength(0);
-  await page.getByRole("button", { name: "Close dictionary" }).click();
-  input = page.locator("textarea.excalidraw-wysiwyg");
-  if (!(await input.count())) await page.mouse.dblclick(450, 340);
-  await input.selectText();
-  await input.click({ button: "right" });
-  await page.getByRole("button", { name: "Translate", exact: true }).click();
-  const island = page.getByRole("region", { name: "Kitty answer" });
-  await expect(island).toContainText("Translated text.");
-  expect(requests).toHaveLength(1);
-  await island.getByLabel("More answer options").click();
-  await island.getByRole("button", { name: "Replace", exact: true }).click();
-  await expect(island).toContainText("Replaced selected text");
-  await expect.poll(() => savedText(page)).toContain("Translated text.");
+  ).toContainText("The management of relations between countries.");
+  expect(dictionary).toBe(1);
+  expect(ai).toBe(0);
 });
 
 test("PDF selection offers Kitty and saved cache works with dictionary offline after reload", async ({
@@ -252,47 +202,14 @@ test("PDF selection offers Kitty and saved cache works with dictionary offline a
   expect(requests).toBe(1);
 });
 
-test("unavailable AI shows retry and navigating away cancels the island", async ({
+test("note keyboard shortcut only exposes dictionary action on narrow screens", async ({
   page,
 }) => {
   await configure(page);
-  await page.route("**/api/kitty/generate", (route) =>
-    route.fulfill({
-      contentType: "application/x-ndjson",
-      body: JSON.stringify({ error: "Kitty is unavailable. Try again." }),
-    }),
-  );
-  const input = await openText(page);
-  await input.click({ button: "right" });
-  await page.getByRole("button", { name: "Explain", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("Kitty is unavailable");
-  await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
-  await page
-    .getByRole("button", { name: "Back to notes", exact: true })
-    .click();
-  await expect(page.getByRole("region", { name: "Kitty answer" })).toHaveCount(
-    0,
-  );
-});
-
-test("custom question uses captured note text and popup fits a narrow viewport", async ({
-  page,
-}) => {
-  await configure(page);
-  const requests: any[] = [];
-  await page.route("https://freedictionaryapi.com/**", () => {
-    throw new Error("Questions must bypass the dictionary");
-  });
+  let requests = 0;
   await page.route("**/api/kitty/generate", (route) => {
-    requests.push(route.request().postDataJSON());
-    return route.fulfill({
-      contentType: "application/x-ndjson",
-      body: JSON.stringify({
-        result: {
-          text: "Diplomacy helps countries resolve disagreements peacefully.",
-        },
-      }),
-    });
+    requests++;
+    return route.fulfill({ status: 500, body: "AI is unavailable in Notes" });
   });
   const input = await openText(page, "diplomacy");
   await input.press("Control+Shift+K");
@@ -305,26 +222,9 @@ test("custom question uses captured note text and popup fits a narrow viewport",
   const popupBox = await popup.boundingBox();
   expect(popupBox!.x).toBeGreaterThanOrEqual(0);
   expect(popupBox!.x + popupBox!.width).toBeLessThanOrEqual(390);
-  await popup.getByRole("button", { name: "Ask AI", exact: true }).click();
-  const question = page.getByRole("textbox", {
-    name: "Ask Kitty",
-    exact: true,
-  });
-  await question.fill("Why is it important?");
-  await expect(question).toHaveValue("Why is it important?");
-  expect(requests).toHaveLength(0);
-  await page.getByRole("button", { name: "Send question" }).click();
-  await expect(
-    page.getByRole("region", { name: "Kitty answer" }),
-  ).toContainText("resolve disagreements peacefully");
-  expect(JSON.parse(requests[0].prompt)).toMatchObject({
-    selectedText: "diplomacy",
-    question: "Why is it important?",
-  });
-  const box = await page.locator(".kitty-island").boundingBox();
-  expect(box!.x).toBeGreaterThanOrEqual(0);
-  expect(box!.x + box!.width).toBeLessThanOrEqual(390);
-  await expect(page.locator(".kitty-island")).toHaveCSS("transform", "none");
-  await expect(page.locator(".kitty-island")).toHaveCSS("opacity", "1");
-  await page.screenshot({ path: "test-results/kitty-narrow.png" });
+  await expect(popup.getByRole("button", { name: "Meaning" })).toBeVisible();
+  await expect(popup.getByRole("button", { name: "Ask AI" })).toHaveCount(0);
+  await expect(popup.getByRole("button", { name: "Explain" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Kitty answer" })).toHaveCount(0);
+  expect(requests).toBe(0);
 });
