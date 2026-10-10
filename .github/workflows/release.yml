@@ -128,7 +128,7 @@ jobs:
             echo "Set GOOGLE_DESKTOP_CLIENT_ID and GOOGLE_DESKTOP_CLIENT_SECRET repository secrets before releasing." >&2
             exit 1
           fi
-          npm run tauri -- build --bundles "${{ matrix.bundles }}"
+          npm run tauri -- build --bundles "${{ matrix.bundles }}" --verbose
 
       - name: Collect installers and checksums
         run: node scripts/collect-release-assets.mjs
