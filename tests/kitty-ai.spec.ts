@@ -258,7 +258,7 @@ async function fixtures(page: Page) {
       result = { configured: true, models: ["gpt-5-mini", "gpt-4.1"] };
     if (method === "web-search")
       result = {
-        provider: "DuckDuckGo",
+        provider: "Google",
         sources: [
           {
             title: "Diplomacy source",

@@ -671,6 +671,7 @@ export default function ReaderHome({ onOpen, folder, onSelectFolder }: Props) {
           <div className="reader-shortcuts" onClick={e => e.stopPropagation()}>
             <div><kbd>T</kbd><span>Open tools</span></div>
             <div><kbd>F</kbd><span>Toggle fullscreen</span></div>
+            <div><kbd>A</kbd><span>Text tool</span></div>
             <div><kbd>H</kbd><span>Highlight</span></div>
             <div><kbd>P</kbd><span>Pen</span></div>
             <div><kbd>G</kbd><span>Move annotations</span></div>

@@ -3,6 +3,7 @@ mod drive;
 mod kitty;
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(drive::DriveState::default())
         .manage(kitty::KittyState::default())
         .invoke_handler(tauri::generate_handler![

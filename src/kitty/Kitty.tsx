@@ -17,6 +17,12 @@ import type { KittyAction, KittyRequest, KittyResponse } from "./types";
 import type { DictionaryResult } from "./types";
 import "./kitty.css";
 
+const isStandaloneGreeting = (question?: string) =>
+  !!question?.trim() &&
+  /^(?:hi|hello|hey|hiya|howdy)(?:\s+(?:there|kitty))?[!,.?\s]*(?:how are you\??)?$/i.test(
+    question.trim(),
+  );
+
 // Selection capture remains shared with the canvas and PDF reader.
 export default function Kitty({ scope, allowAI }: { scope: string; allowAI: boolean }) {
   const askOnSelection = useKittySettings((s) => s.askOnSelection);
@@ -262,8 +268,11 @@ export default function Kitty({ scope, allowAI }: { scope: string; allowAI: bool
     language?: "en" | "ne",
     asked?: string,
     previousAnswer?: string,
+    conversationHistory?: string,
   ) => {
-    if (!allowAI || !selection) return;
+    if (!allowAI) return;
+    const standaloneGreeting =
+      action === "ASK" && isStandaloneGreeting(asked);
     service.current ??= new DictionaryService();
     if (!controller.current) {
       const runtime = new ManagedRuntime(useKittySettings.getState);
@@ -277,14 +286,13 @@ export default function Kitty({ scope, allowAI }: { scope: string; allowAI: bool
     }
     const settings = useKittySettings.getState();
     const next: KittyRequest = {
-      text: selection.text,
-      context: selection.context,
+      text: standaloneGreeting ? "" : selection?.text ?? "",
+      context: standaloneGreeting ? "" : selection?.context ?? "",
       action,
       question: asked,
       previousAnswer:
-        action === "ASK"
-          ? (previousAnswer ?? aiResponse?.primaryText)
-          : undefined,
+        action === "ASK" && !standaloneGreeting ? previousAnswer : undefined,
+      conversationHistory: standaloneGreeting ? undefined : conversationHistory,
       targetLanguage: language ?? settings.targetLanguage,
       mode: settings.aiMode,
       model: settings.cloudModel,
@@ -362,10 +370,11 @@ export default function Kitty({ scope, allowAI }: { scope: string; allowAI: bool
       import("../canvas/storage"),
     ]);
     const id = crypto.randomUUID();
+    const noteTitle = aiResponse?.title.trim().slice(0, 80) || "Kitty Chat";
     const elements = convertToExcalidrawElements([
       {
         type: "text",
-        text: `${aiResponse?.title ?? "Kitty"}\n\n${answerWithSources}`,
+        text: `${noteTitle}\n\n${answerWithSources}`,
         x: 80,
         y: 80,
         width: 600,
@@ -378,7 +387,7 @@ export default function Kitty({ scope, allowAI }: { scope: string; allowAI: bool
       notes: [
         {
           id,
-          title: aiResponse?.title.slice(0, 80) ?? "Kitty",
+          title: noteTitle,
           html: "",
           preview: answerWithSources.slice(0, 1000),
           folder: "",
@@ -629,9 +638,12 @@ export default function Kitty({ scope, allowAI }: { scope: string; allowAI: bool
                   request.targetLanguage,
                   request.question,
                   request.previousAnswer,
+                  request.conversationHistory,
                 );
             }}
-            onAction={runAI}
+            onAction={(action, language, question, conversationHistory) =>
+              runAI(action, language, question, undefined, conversationHistory)
+            }
             onCopy={() =>
               void perform(
                 () => navigator.clipboard.writeText(answerWithSources),

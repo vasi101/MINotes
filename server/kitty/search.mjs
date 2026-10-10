@@ -30,7 +30,7 @@ export function parseSearchHTML(html) {
   const results = [];
   const links = [
     ...html.matchAll(
-      /<a\b([^>]*\bclass=["'][^"']*\bresult__a\b[^"']*["'][^>]*)>([\s\S]*?)<\/a>/gi,
+      /<a\b([^>]*)>(?:(?!<\/a>)[\s\S])*?<h3\b[^>]*>([\s\S]*?)<\/h3>(?:(?!<\/a>)[\s\S])*<\/a>/gi,
     ),
   ];
   for (let i = 0; i < links.length && results.length < 4; i++) {
@@ -39,10 +39,13 @@ export function parseSearchHTML(html) {
     if (!href) continue;
     let url;
     try {
-      const redirect = new URL(plain(href), "https://duckduckgo.com");
+      const redirect = new URL(plain(href), "https://www.google.com");
+      const googleHost = /(^|\.)google\.[a-z.]+$/i.test(redirect.hostname);
       url = new URL(
-        redirect.hostname.endsWith("duckduckgo.com")
-          ? redirect.searchParams.get("uddg") || redirect.href
+        googleHost
+          ? redirect.searchParams.get("q") ||
+              redirect.searchParams.get("url") ||
+              ""
           : redirect.href,
       );
     } catch {
@@ -50,7 +53,7 @@ export function parseSearchHTML(html) {
     }
     if (
       !["https:", "http:"].includes(url.protocol) ||
-      /(^|\.)duckduckgo\.com$/.test(url.hostname) ||
+      /(^|\.)google\.[a-z.]+$/i.test(url.hostname) ||
       results.some((r) => r.url === url.href)
     )
       continue;
@@ -59,7 +62,7 @@ export function parseSearchHTML(html) {
       links[i + 1]?.index ?? html.length,
     );
     const snippet = block.match(
-      /<(?:a|div|span)\b[^>]*class=["'][^"']*\bresult__snippet\b[^"']*["'][^>]*>([\s\S]*?)<\/(?:a|div|span)>/i,
+      /<div\b[^>]*class=["'][^"']*\bVwiC3b\b[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
     )?.[1];
     const title = plain(match[2]).slice(0, 180),
       excerpt = plain(snippet).slice(0, 550);
@@ -95,14 +98,18 @@ export class WebSearchService {
     ]);
     const options = {
       signal,
-      headers: { "User-Agent": "MINotes/0.1 (personal reading assistant)" },
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
     };
     try {
       let sources = [],
-        provider = "DuckDuckGo";
+        provider = "Google";
       try {
         const response = await this.fetcher(
-          `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
+          `https://www.google.com/search?gbv=1&num=10&q=${encodeURIComponent(query)}`,
           {
             ...options,
             signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]),

@@ -67,28 +67,30 @@ npm run tauri build
 The installers are generated at:
 
 ```text
-src-tauri/target/release/bundle/nsis/Mi Notes_0.1.0_x64-setup.exe
-src-tauri/target/release/bundle/msi/Mi Notes_0.1.0_x64_en-US.msi
+src-tauri/target/release/bundle/nsis/Mi Notes_0.1.4_x64-setup.exe
+src-tauri/target/release/bundle/msi/Mi Notes_0.1.4_x64_en-US.msi
 ```
 
 The NSIS `.exe` installer is the easiest option for most users. Installing a newer build over an existing installation does not intentionally remove Mi Notes data.
 
 ## GitHub releases
 
-The workflow at `.github/workflows/release.yml` builds Windows installers when a version tag is pushed:
+The workflow at `.github/workflows/release.yml` builds installers for Windows x64, Linux x64, and macOS Apple Silicon when a version tag is pushed:
 
 ```powershell
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.1.4
+git push origin v0.1.4
 ```
 
 Before tagging, commit the workflow and application changes, and make sure the versions in `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, and `src-tauri/tauri.conf.json` agree. The tag must be `v` followed by the application version.
 
-The workflow checks out the exact tag, validates the application version, installs Node and Rust, runs drawing/geometry checks, and builds Windows x64 NSIS and MSI installers using the Rust lockfile. It publishes both installers and `SHA256SUMS.txt` to the GitHub Release and saves a separate Actions artifact. Tags containing a hyphen (such as `v0.1.0-beta.1`) create prereleases.
+The workflow checks out the exact tag, validates the application version, runs drawing/geometry checks, and builds Windows NSIS and MSI installers, Linux Debian and AppImage packages, and a macOS DMG. It publishes all installers and a combined `SHA256SUMS.txt` to the GitHub Release, and saves platform-specific Actions artifacts. Tags containing a hyphen (such as `v0.1.0-beta.1`) create prereleases.
+
+Linux packages target x64. The AppImage still needs the system WebKitGTK 4.1 runtime libraries. The macOS DMG targets Apple Silicon (ARM64); Intel Mac builds are not included yet.
 
 To rerun an existing tag, open **Actions → Release Mi Notes → Run workflow** and enter the tag. The workflow uses GitHub's automatic `GITHUB_TOKEN`; no personal access token is needed. Repository policies must allow the workflow to write release contents.
 
-The installers are currently **unsigned**, and the release description states this. GitHub's token authorizes uploading files; it is not a Windows code-signing certificate. Windows certificate signing must be configured separately once a signing provider is available.
+The installers are currently **unsigned**. macOS users may need to approve the app in Privacy & Security before opening it. GitHub's token authorizes uploading files; it is not a platform code-signing certificate. Signing and notarization must be configured separately once signing credentials are available.
 
 ## Data and privacy
 

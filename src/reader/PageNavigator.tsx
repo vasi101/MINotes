@@ -221,27 +221,6 @@ export default function PageNavigator({
           />{" "}
           of {count}
         </div>
-        <button
-          type="button"
-          className="reader-page-expand"
-          aria-label="Toggle page card"
-          aria-expanded={editing}
-          onClick={() => {
-            if (editing) close();
-            else setEditing(true);
-          }}
-        >
-          <svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true">
-            <path
-              d={editing ? "m4 13 6-6 6 6" : "m4 7 6 6 6-6"}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </button>
       </div>
       {editing && !kittyVisible && (
         <ReaderKittyControls

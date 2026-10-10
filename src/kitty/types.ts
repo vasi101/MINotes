@@ -71,6 +71,7 @@ export type KittyRequest = {
   context?: string;
   question?: string;
   previousAnswer?: string;
+  conversationHistory?: string;
   webSources?: WebSource[];
   targetLanguage?: "en" | "ne";
   dictionaryDefinition?: string;

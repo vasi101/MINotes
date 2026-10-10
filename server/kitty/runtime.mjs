@@ -1,6 +1,34 @@
 import { performance } from "node:perf_hooks";
 import { backendOrder } from "./hardware.mjs";
 
+function trimRepeatedPhrase(text) {
+  const words = text.trimEnd().split(/\s+/u);
+  const firstPossibleStart = Math.max(0, words.length - 48);
+  for (let start = firstPossibleStart; start <= words.length - 9; start++) {
+    const maxPhraseLength = Math.min(16, Math.floor((words.length - start) / 3));
+    for (let length = maxPhraseLength; length >= 3; length--) {
+      let repetitions = 1;
+      while (
+        start + (repetitions + 1) * length <= words.length &&
+        words
+          .slice(start, start + length)
+          .every(
+            (word, index) =>
+              word === words[start + repetitions * length + index],
+          )
+      ) {
+        repetitions++;
+      }
+      if (repetitions >= 3)
+        return {
+          text: words.slice(0, start + length).join(" "),
+          repeated: true,
+        };
+    }
+  }
+  return { text: text.trimEnd(), repeated: false };
+}
+
 export class NodeLlamaProvider {
   model;
   llama;
@@ -99,19 +127,42 @@ export class NodeLlamaProvider {
         systemPrompt: args.system,
       });
       let text = "";
+      const repetitionStop = new AbortController();
+      const generationSignal = args.translation
+        ? AbortSignal.any([signal, repetitionStop.signal])
+        : signal;
       const result = await session.prompt(args.prompt, {
-        signal,
+        signal: generationSignal,
+        stopOnAbortSignal: !!args.translation,
         budgets: { thoughtTokens: 0 },
-        maxTokens: args.concise ? 180 : 768,
-        temperature: args.translation ? 0.1 : 0.3,
+        maxTokens: args.translation
+          ? Math.min(768, Math.max(160, Math.ceil(args.prompt.length * 1.4)))
+          : args.concise
+            ? 180
+            : 768,
+        temperature: args.translation ? 0.05 : 0.3,
+        ...(args.translation
+          ? {
+              repeatPenalty: { lastTokens: 128, penalty: 1.15 },
+              dryRepeatPenalty: { strength: 0.8, allowedLength: 4 },
+            }
+          : {}),
         onTextChunk: (chunk) => {
           text += chunk;
+          if (args.translation) {
+            const checked = trimRepeatedPhrase(text);
+            if (checked.repeated) {
+              text = checked.text;
+              repetitionStop.abort();
+            }
+          }
           progress({ phase: "generating", text });
         },
       });
-      if (!result.trim())
+      const output = args.translation ? trimRepeatedPhrase(result).text : result;
+      if (!output.trim())
         throw new Error("Kitty returned an empty answer. Try again.");
-      return result;
+      return output;
     } finally {
       await session?.dispose();
       await context?.dispose();

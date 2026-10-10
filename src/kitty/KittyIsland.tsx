@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import type { Citation, KittyAction, KittyResponse } from "./types";
 import KittyControls, { WebSearchToggle } from "./KittyControls";
-import { useKittySettings } from "./settings";
 
 type Props = {
   status: string;
@@ -21,12 +20,14 @@ type Props = {
     action: KittyAction,
     language?: "en" | "ne",
     question?: string,
+    conversationHistory?: string,
   ) => void;
   onCopy: () => void;
   onInsert: () => void;
   onReplace: () => void;
   onAddNote: () => void;
 };
+type ChatTurn = { question: string; answer?: string; error?: string };
 function citedText(text: string, citations: Citation[] = []) {
   const parts: ReactNode[] = [];
   let position = 0;
@@ -128,6 +129,10 @@ function formattedText(text: string, citations: Citation[] = []) {
 export default function KittyIsland(props: Props) {
   const { response, error, status, pending: busy } = props;
   const [question, setQuestion] = useState("");
+  const [turns, setTurns] = useState<ChatTurn[]>([]);
+  const turnsRef = useRef<ChatTurn[]>([]);
+  const [activeTurnIndex, setActiveTurnIndex] = useState<number | null>(null);
+  const hasPdfContext = !!props.selectedText.trim();
   const inputRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     if (response || busy) return;
@@ -141,8 +146,33 @@ export default function KittyIsland(props: Props) {
     );
     return () => clearTimeout(timer);
   }, []);
-  const settings = useKittySettings();
   const reducedMotion = useReducedMotion();
+  const saveTurns = (next: ChatTurn[]) => {
+    turnsRef.current = next;
+    setTurns(next);
+  };
+  const historyText = () =>
+    turnsRef.current
+      .slice(-12)
+      .map(
+        (turn) =>
+          `User: ${turn.question}\nKitty: ${turn.answer ?? turn.error ?? ""}`,
+      )
+      .join("\n\n")
+      .slice(-8000);
+  useEffect(() => {
+    if (activeTurnIndex === null) return;
+    if (!props.response?.primaryText && !props.error) return;
+    const next = [...turnsRef.current];
+    const turn = next[activeTurnIndex];
+    if (!turn) return;
+    next[activeTurnIndex] = {
+      ...turn,
+      answer: props.response?.primaryText || turn.answer,
+      error: props.error || undefined,
+    };
+    saveTurns(next);
+  }, [activeTurnIndex, props.error, props.response]);
   const sources = [
     ...new Map(
       [...(response?.webSources ?? []), ...(response?.citations ?? [])].map(
@@ -152,13 +182,19 @@ export default function KittyIsland(props: Props) {
   ];
   const submit = () => {
     if (question.trim() && !busy) {
-      props.onAction("ASK", undefined, question);
+      const asked = question.trim();
+      const history = historyText();
+      const index = turnsRef.current.length;
+      saveTurns([...turnsRef.current, { question: asked }]);
+      setActiveTurnIndex(index);
+      props.onAction("ASK", undefined, asked, history);
       setQuestion("");
     }
   };
   const action = (value: KittyAction, button: HTMLButtonElement) => {
     button.closest("details")?.removeAttribute("open");
-    props.onAction(value);
+    setActiveTurnIndex(null);
+    props.onAction(value, undefined, undefined, historyText());
   };
   return (
     <motion.section
@@ -170,9 +206,7 @@ export default function KittyIsland(props: Props) {
     >
       <header className="kitty-chat-header">
         <span className="kitty-brand">
-          <span className="kitty-orb" aria-hidden="true">
-            &#10023;
-          </span>
+          <img className="kitty-orb" src="/reader-kitty-cat.png" alt="" />
           Kitty
         </span>
         <KittyControls
@@ -190,15 +224,27 @@ export default function KittyIsland(props: Props) {
           &times;
         </button>
       </header>
-      <details className="kitty-chat-context">
-        <summary>
-          {props.selectedText.slice(0, 110) ||
-            "No page text available - ask Kitty a question"}
-          {props.selectedText.length > 110 ? "..." : ""}
-        </summary>
-        <p>{props.selectedText}</p>
-      </details>
+      {hasPdfContext ? (
+        <details className="kitty-chat-context">
+          <summary>
+            {props.selectedText.slice(0, 110)}
+            {props.selectedText.length > 110 ? "..." : ""}
+          </summary>
+          <p>{props.selectedText}</p>
+        </details>
+      ) : null}
       <div className="kitty-answer-body">
+        {turns.slice(0, activeTurnIndex ?? turns.length).map((turn, index) => (
+          <div className="kitty-chat-turn" key={`${index}-${turn.question}`}>
+            <p className="kitty-user-question">{turn.question}</p>
+            {turn.answer && (
+              <div className="kitty-answer-text">
+                {formattedText(turn.answer)}
+              </div>
+            )}
+            {turn.error && <p className="kitty-chat-error">{turn.error}</p>}
+          </div>
+        ))}
         {props.askedQuestion && (
           <p className="kitty-user-question">{props.askedQuestion}</p>
         )}
@@ -208,8 +254,8 @@ export default function KittyIsland(props: Props) {
             <button onClick={props.onRetry}>Try again</button>
           </div>
         ) : response ? (
-          <>
-            {response.type === "TRANSLATION" && (
+          <div className="kitty-current-answer">
+            {response.type === "TRANSLATION" && hasPdfContext && (
               <label className="kitty-language-label">
                 Translation
                 <select
@@ -219,7 +265,12 @@ export default function KittyIsland(props: Props) {
                     response.translation?.targetLanguage ?? props.targetLanguage
                   }
                   onChange={(e) =>
-                    props.onAction("TRANSLATE", e.target.value as "en" | "ne")
+                    props.onAction(
+                      "TRANSLATE",
+                      e.target.value as "en" | "ne",
+                      undefined,
+                      historyText(),
+                    )
                   }
                 >
                   <option value="ne">Nepali</option>
@@ -227,14 +278,16 @@ export default function KittyIsland(props: Props) {
                 </select>
               </label>
             )}
-            <div
-              className={`kitty-answer-text ${response.type === "TRANSLATION" ? "kitty-translated" : ""}`}
-            >
-              {formattedText(response.primaryText, response.citations)}
+            <div className="kitty-response-box">
+              <div
+                className={`kitty-answer-text ${response.type === "TRANSLATION" ? "kitty-translated" : ""}`}
+              >
+                {formattedText(response.primaryText, response.citations)}
+              </div>
+              {response.searchNotice && (
+                <p className="kitty-search-notice">{response.searchNotice}</p>
+              )}
             </div>
-            {response.searchNotice && (
-              <p className="kitty-search-notice">{response.searchNotice}</p>
-            )}
             {!!sources.length && (
               <details className="kitty-sources">
                 <summary>
@@ -262,38 +315,35 @@ export default function KittyIsland(props: Props) {
             )}
             {!busy && (
               <footer className="kitty-answer-tools">
-                <button onClick={props.onCopy} title="Copy answer">
-                  Copy
-                </button>
                 <button
-                  onClick={props.onAddNote}
-                  title="Save answer as a new note"
+                  onClick={props.onCopy}
+                  title="Copy answer"
+                  aria-label="Copy answer"
                 >
-                  Save as note
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    aria-hidden="true"
+                  >
+                    <rect x="7" y="6" width="10" height="12" rx="2" />
+                    <path d="M13 6V4a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2" />
+                  </svg>
                 </button>
-                <details className="kitty-more">
-                  <summary aria-label="More answer options">More</summary>
-                  <div className="kitty-dropdown">
-                    {props.canInsert && (
-                      <button onClick={props.onInsert}>Insert into note</button>
-                    )}
-                    {props.canReplace && response.type === "TRANSLATION" && (
-                      <button onClick={props.onReplace}>Replace</button>
-                    )}
-                    <button onClick={props.onRetry}>Regenerate</button>
-                  </div>
-                </details>
                 <span className="kitty-response-source">
                   {response.source === "CLOUD_AI" ? "Cloud" : "On device"}
                 </span>
               </footer>
             )}
-          </>
+          </div>
         ) : (
           !busy && (
             <p className="kitty-chat-empty">
-              What would you like to explore? Ask about the text, or start a
-              conversation.
+              Ask about this PDF or anything else. Kitty will use the PDF when
+              it helps.
             </p>
           )
         )}
@@ -319,7 +369,7 @@ export default function KittyIsland(props: Props) {
         <textarea
           ref={inputRef}
           aria-label="Ask Kitty"
-          placeholder="Ask about this selection..."
+          placeholder="Ask Kitty anything..."
           value={question}
           disabled={busy}
           maxLength={2000}
@@ -337,23 +387,96 @@ export default function KittyIsland(props: Props) {
           }}
         />
         <div className="kitty-composer-toolbar">
-          <details className="kitty-more kitty-action-picker">
-            <summary aria-label="AI actions">Actions</summary>
-            <div className="kitty-dropdown">
-              {(["EXPLAIN", "SUMMARIZE", "SIMPLIFY", "TRANSLATE"] as const).map(
-                (value) => (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    key={value}
-                    onClick={(e) => action(value, e.currentTarget)}
-                  >
-                    {value[0] + value.slice(1).toLowerCase()}
-                  </button>
-                ),
-              )}
-            </div>
-          </details>
+          {(hasPdfContext || !!response) && (
+            <details className="kitty-more kitty-action-picker">
+              <summary aria-label="More actions" title="More actions">
+                <svg
+                  width="17"
+                  height="17"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                  aria-hidden="true"
+                >
+                  <circle cx="4" cy="10" r="1.5" />
+                  <circle cx="10" cy="10" r="1.5" />
+                  <circle cx="16" cy="10" r="1.5" />
+                </svg>
+              </summary>
+              <div className="kitty-dropdown">
+                {hasPdfContext && (
+                  <>
+                    {(
+                      ["EXPLAIN", "SUMMARIZE", "SIMPLIFY", "TRANSLATE"] as const
+                    ).map((value) => (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        key={value}
+                        onClick={(e) => action(value, e.currentTarget)}
+                      >
+                        {value[0] + value.slice(1).toLowerCase()}
+                      </button>
+                    ))}
+                  </>
+                )}
+                {response && (
+                  <>
+                    {hasPdfContext && <hr />}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.currentTarget
+                          .closest("details")
+                          ?.removeAttribute("open");
+                        props.onAddNote();
+                      }}
+                    >
+                      Save as note
+                    </button>
+                    {props.canInsert && hasPdfContext && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.currentTarget
+                            .closest("details")
+                            ?.removeAttribute("open");
+                          props.onInsert();
+                        }}
+                      >
+                        Insert into note
+                      </button>
+                    )}
+                    {props.canReplace &&
+                      hasPdfContext &&
+                      response.type === "TRANSLATION" && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.currentTarget
+                              .closest("details")
+                              ?.removeAttribute("open");
+                            props.onReplace();
+                          }}
+                        >
+                          Replace text
+                        </button>
+                      )}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.currentTarget
+                          .closest("details")
+                          ?.removeAttribute("open");
+                        props.onRetry();
+                      }}
+                    >
+                      Regenerate
+                    </button>
+                  </>
+                )}
+              </div>
+            </details>
+          )}
           <WebSearchToggle disabled={busy} />
           <button
             type="submit"
@@ -374,13 +497,6 @@ export default function KittyIsland(props: Props) {
             </svg>
           </button>
         </div>
-        {settings.webSearch && (
-          <p className="kitty-search-hint">
-            {settings.aiMode === "local"
-              ? "Search goes online. Your answer is generated on this device."
-              : "Use online sources for questions and explanations."}
-          </p>
-        )}
       </form>
     </motion.section>
   );

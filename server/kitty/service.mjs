@@ -8,12 +8,15 @@ import {
   open,
 } from "node:fs/promises";
 import { join } from "node:path";
+import { basename, extname, resolve, sep } from "node:path";
+import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { analyzeHardware, selectModel } from "./hardware.mjs";
 import { downloadModel } from "./download.mjs";
 import { NodeLlamaProvider } from "./runtime.mjs";
 import { CloudAIService } from "./cloud.mjs";
 import { WebSearchService } from "./search.mjs";
+import { downloadCustomModel } from "./custom-model.mjs";
 
 export const manifest = JSON.parse(
   await readFile(new URL("./model-manifest.json", import.meta.url), "utf8"),
@@ -28,6 +31,7 @@ export class KittyAIService {
     runtime = new NodeLlamaProvider(),
     analyze = analyzeHardware,
     download = downloadModel,
+    downloadCustom = downloadCustomModel,
     documentsModelDirectory = join(homedir(), "Documents", "AI", "models"),
   } = {}) {
     this.cloud = new CloudAIService();
@@ -37,6 +41,7 @@ export class KittyAIService {
     this.runtime = runtime;
     this.analyze = analyze;
     this.download = download;
+    this.downloadCustom = downloadCustom;
     this.operations = new Map();
     this.progress = { phase: "idle" };
     this.busy = false;
@@ -85,6 +90,24 @@ export class KittyAIService {
       await handle?.close();
     }
   }
+  async inspectCustomModel(model) {
+    if (!model || typeof model.path !== "string") return null;
+    let handle;
+    try {
+      const info = await stat(model.path);
+      if (!info.isFile() || info.size < 1_000_000 || info.size > 16 * 1024 ** 3) return null;
+      handle = await open(model.path, "r");
+      const header = Buffer.alloc(8);
+      await handle.read(header, 0, 8, 0);
+      if (header.toString("ascii", 0, 4) !== "GGUF" || ![2, 3].includes(header.readUInt32LE(4))) return null;
+      return { ...model, sizeBytes: info.size, backend: this.runtime.backend || "automatic", backends: ["cuda", "vulkan", "cpu"] };
+    } catch (error) {
+      if (error.code === "ENOENT") return null;
+      throw new Error("Could not read the selected GGUF model file.");
+    } finally {
+      await handle?.close();
+    }
+  }
   async existingBytes() {
     const sizes = {};
     for (const model of manifest.models) {
@@ -110,6 +133,7 @@ export class KittyAIService {
   }
   async status() {
     const config = await this.config();
+    const customModel = await this.inspectCustomModel(config.customModel);
     const documentsModel = await this.documentsModel(config);
     const installed = manifest.models.find((m) => m.id === config.modelId);
     const exists =
@@ -127,7 +151,7 @@ export class KittyAIService {
     }
     return {
       installed:
-        documentsModel ??
+        customModel ?? documentsModel ??
         (exists
           ? {
               id: installed.id,
@@ -166,7 +190,7 @@ export class KittyAIService {
       this.search.cancel(args.targetId);
       return { cancelled: true };
     }
-    if (!["install", "generate", "remove"].includes(method))
+    if (!["install", "generate", "remove", "import-local", "download-custom"].includes(method))
       throw new Error("Unknown Kitty action.");
     if (this.busy)
       throw new Error(
@@ -201,6 +225,13 @@ export class KittyAIService {
             ).catch((error) => {
               if (error.code !== "ENOENT") throw error;
             });
+        const config = await this.config();
+        const custom = config.customModel;
+        if (custom && !custom.external && typeof custom.path === "string") {
+          const modelsRoot = resolve(join(this.root, "models")) + sep;
+          if (resolve(custom.path).startsWith(modelsRoot))
+            await unlink(custom.path).catch((error) => { if (error.code !== "ENOENT") throw error; });
+        }
         await this.save({ useDocumentsModel: false });
         progress({ phase: "idle" });
         return this.status();
@@ -239,9 +270,58 @@ export class KittyAIService {
           modelId: model.id,
           backend: this.runtime.backend,
           sha256: model.sha256,
+          customModel: undefined,
         });
         await this.runtime.unload();
         progress({ phase: "ready", modelId: model.id });
+        return { installed: true, modelId: model.id };
+      }
+      if (method === "import-local" || method === "download-custom") {
+        let path, sha256, sizeBytes;
+        if (method === "import-local") {
+          if (typeof args.path !== "string" || args.path.length > 4096)
+            throw new Error("Choose a GGUF model file.");
+          path = args.path;
+        } else {
+          if (typeof args.url !== "string" || args.url.length > 4096 || typeof args.sha256 !== "string" || args.sha256.length > 100)
+            throw new Error("Enter a valid model URL and optional SHA-256.");
+          const downloaded = await this.downloadCustom(args.url, args.sha256, join(this.root, "models"), signal, progress);
+          ({ path, sha256, sizeBytes } = downloaded);
+        }
+        const info = await stat(path);
+        if (!info.isFile() || info.size < 1_000_000 || info.size > 16 * 1024 ** 3)
+          throw new Error("Choose a GGUF model file between 1 MB and 16 GB.");
+        let handle;
+        try {
+          handle = await open(path, "r");
+          const header = Buffer.alloc(8);
+          await handle.read(header, 0, 8, 0);
+          if (header.toString("ascii", 0, 4) !== "GGUF" || ![2, 3].includes(header.readUInt32LE(4)))
+            throw new Error("This file is not a supported GGUF model.");
+        } finally { await handle?.close(); }
+        const fileName = basename(path, extname(path));
+        const model = {
+          id: `custom-${randomUUID()}`,
+          displayName: fileName.slice(0, 100) || "Custom GGUF model",
+          description: "Custom GGUF model",
+          licenseUrl: "",
+          model: fileName.slice(0, 100) || "Custom GGUF model",
+          quantization: "GGUF",
+          contextSize: 4096,
+          sizeBytes: sizeBytes ?? info.size,
+          path,
+          external: method === "import-local",
+          backend: "automatic",
+          backends: ["cuda", "vulkan", "cpu"],
+          ...(sha256 ? { sha256 } : {}),
+        };
+        await this.runtime.unload();
+        progress({ phase: "testing", completed: 0, total: 0 });
+        await this.runtime.load(model, path, hardware, signal, progress);
+        signal.throwIfAborted();
+        await this.runtime.unload();
+        await this.save({ version: 1, useDocumentsModel: false, customModel: model });
+        progress({ phase: "ready" });
         return { installed: true, modelId: model.id };
       }
       if (
@@ -252,7 +332,8 @@ export class KittyAIService {
       )
         throw new Error("Select a shorter passage.");
       const config = await this.config(),
-        external = await this.documentsModel(config),
+        custom = await this.inspectCustomModel(config.customModel),
+        external = custom ?? await this.documentsModel(config),
         model =
           external ?? manifest.models.find((m) => m.id === config.modelId);
       if (!model || (!external && config.sha256 !== model.sha256))
@@ -270,7 +351,8 @@ export class KittyAIService {
       progress({ phase: "ready" });
       return { text };
     } catch (error) {
-      if (method === "install") await this.runtime.unload();
+      if (["install", "import-local", "download-custom"].includes(method))
+        await this.runtime.unload();
       progress({
         phase: signal.aborted ? "paused" : "error",
         error: signal.aborted

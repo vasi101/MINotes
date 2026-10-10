@@ -58,6 +58,8 @@ type SetupState = {
   refresh: () => Promise<void>;
   analyze: () => Promise<void>;
   install: () => Promise<void>;
+  importLocal: (path: string) => Promise<void>;
+  downloadCustom: (url: string, sha256: string) => Promise<void>;
   pause: () => void;
   remove: () => Promise<void>;
 };
@@ -128,6 +130,38 @@ export const useKittySetup = create<SetupState>((set, get) => ({
             : "Setup could not finish.",
         ...(controller.signal.aborted ? { progress: { phase: "paused" } } : {}),
       });
+    } finally {
+      set({ installing: false });
+      installController = undefined;
+      await get().refresh();
+    }
+  },
+  importLocal: async (path) => {
+    if (get().installing || !path) return;
+    const controller = new AbortController();
+    installController = controller;
+    set({ installing: true, error: "", progress: { phase: "testing" } });
+    try {
+      await kittyRequest("import-local", { path }, (progress) => set({ progress }), controller.signal);
+      set({ analysis: undefined });
+    } catch (error) {
+      set({ error: controller.signal.aborted ? "" : error instanceof Error ? error.message : "Could not load this GGUF file." });
+    } finally {
+      set({ installing: false });
+      installController = undefined;
+      await get().refresh();
+    }
+  },
+  downloadCustom: async (url, sha256) => {
+    if (get().installing || !url.trim()) return;
+    const controller = new AbortController();
+    installController = controller;
+    set({ installing: true, error: "", progress: { phase: "downloading", completed: 0, total: 0 } });
+    try {
+      await kittyRequest("download-custom", { url: url.trim(), sha256: sha256.trim() }, (progress) => set({ progress }), controller.signal);
+      set({ analysis: undefined });
+    } catch (error) {
+      set({ error: controller.signal.aborted ? "" : error instanceof Error ? error.message : "Could not download this model." });
     } finally {
       set({ installing: false });
       installController = undefined;

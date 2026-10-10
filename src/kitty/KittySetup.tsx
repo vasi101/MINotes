@@ -1,9 +1,14 @@
 import { useEffect, useState } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
+import { isTauri } from "@tauri-apps/api/core";
 import { useKittySetup } from "./setupStore";
 const gb = (bytes: number) => `${(bytes / 1e9).toFixed(1)} GB`;
 export default function KittySetup() {
   const setup = useKittySetup();
   const [removing, setRemoving] = useState(false);
+  const [modelUrl, setModelUrl] = useState("");
+  const [modelSha256, setModelSha256] = useState("");
+  const [pickerError, setPickerError] = useState("");
   useEffect(() => {
     void setup.refresh();
   }, []);
@@ -132,6 +137,38 @@ export default function KittySetup() {
           )}
         </>
       )}
+      <details className="kitty-custom-model">
+        <summary>Use a different GGUF model</summary>
+        <p>Choose a GGUF file on this computer or download one from a direct HTTPS link.</p>
+        <button
+          type="button"
+          disabled={busy || !isTauri()}
+          onClick={async () => {
+            try {
+              setPickerError("");
+              const selected = await open({ multiple: false, filters: [{ name: "GGUF model", extensions: ["gguf"] }] });
+              if (typeof selected === "string") await setup.importLocal(selected);
+            } catch (error) {
+              setPickerError(error instanceof Error ? error.message : "Could not open the file picker.");
+            }
+          }}
+        >
+          Choose local GGUF file
+        </button>
+        {!isTauri() && <p>Local file selection is available in the desktop app.</p>}
+        {pickerError && <p role="alert">{pickerError}</p>}
+        <form onSubmit={(event) => { event.preventDefault(); void setup.downloadCustom(modelUrl, modelSha256); }}>
+          <label>
+            Direct HTTPS GGUF URL
+            <input type="url" value={modelUrl} onChange={(event) => setModelUrl(event.target.value)} placeholder="https://…/model.gguf" required disabled={busy} />
+          </label>
+          <label>
+            SHA-256 checksum (optional)
+            <input type="text" value={modelSha256} onChange={(event) => setModelSha256(event.target.value)} placeholder="64 hexadecimal characters" disabled={busy} />
+          </label>
+          <button type="submit" disabled={busy || !modelUrl.trim()}>Download and use model</button>
+        </form>
+      </details>
       {progress && (
         <div aria-live="polite">
           <p>

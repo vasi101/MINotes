@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { parseSearchHTML, WebSearchService } from "../server/kitty/search.mjs";
 
 const html =
-  '<a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Fnepal&amp;rut=x">Nepal &amp; geography</a><a class="result__snippet">Nepal is in the <b>Northern</b> Hemisphere.</a>';
-test("search parser returns plain excerpts and safe destination links", () => {
+  '<div class="MjjYud"><a href="https://example.com/nepal"><h3 class="LC20lb">Nepal &amp; geography</h3></a><div class="VwiC3b yXK7lf">Nepal is in the <b>Northern</b> Hemisphere.</div></div>';
+test("Google parser returns plain excerpts and safe destination links", () => {
   assert.deepEqual(parseSearchHTML(html), [
     {
       title: "Nepal & geography",
@@ -14,10 +14,7 @@ test("search parser returns plain excerpts and safe destination links", () => {
   ]);
   assert.deepEqual(
     parseSearchHTML(
-      html.replace(
-        "//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Fnepal&amp;rut=x",
-        "javascript:alert(1)",
-      ),
+      html.replace("https://example.com/nepal", "javascript:alert(1)"),
     ),
     [],
   );
@@ -34,7 +31,7 @@ test("local search needs no cloud key and caches bounded public results", async 
     query: "Nepal hemispheres",
     requestId: "a",
   });
-  assert.equal(result.provider, "DuckDuckGo");
+  assert.equal(result.provider, "Google");
   assert.equal(result.sources.length, 1);
   await search.search({ query: "Nepal hemispheres", requestId: "b" });
   assert.equal(calls.length, 1);
@@ -46,7 +43,7 @@ test("local search needs no cloud key and caches bounded public results", async 
 test("search challenge uses labeled Wikipedia fallback without bypassing it", async () => {
   const search = new WebSearchService({
     fetcher: async (url) =>
-      url.includes("duckduckgo")
+      url.includes("google.com/search")
         ? new Response("challenge", { status: 202 })
         : Response.json({
             pages: [

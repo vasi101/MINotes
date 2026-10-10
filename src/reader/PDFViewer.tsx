@@ -16,7 +16,7 @@ import ShapePicker,{ShapeIcon} from '../ShapePicker';
 import {isShape} from '../shapes';
 import {useReaderFullscreen} from './useReaderFullscreen';
 const EMPTY_MARKS: PdfMark[] = [];
-const TOOL_KEYS: Record<ReaderTool,string> = {select:'V',text:'',highlight:'H',marker:'M',ink:'P',erase:'E',move:'G','rounded-rectangle':'R',circle:'C',oval:'O',line:'L',triangle:'',diamond:''};
+const TOOL_KEYS: Record<ReaderTool,string> = {select:'V',text:'A',highlight:'H',marker:'M',ink:'P',erase:'E',move:'G','rounded-rectangle':'R',circle:'C',oval:'O',line:'L',triangle:'',diamond:''};
 interface Props { docId: string; onBack: () => void; onInsertIntoNote?: (id:string,page:number,marks:PdfMark[]) => void }
 export default function PDFViewer({docId,onBack,onInsertIntoNote}:Props) {
   const {element,fullscreen,fullscreenError,enter,exit}=useReaderFullscreen();
@@ -196,7 +196,7 @@ export default function PDFViewer({docId,onBack,onInsertIntoNote}:Props) {
         if(event.key==='PageDown'){event.preventDefault();go(Math.min(current+1,pdf?.numPages||1))}
         if(event.key==='PageUp'){event.preventDefault();go(Math.max(current-1,1))}
         if(event.key==='Escape'){setPalette(false);setActions(false);setShowShapes(false);if(!ringLocked)setShowControls(false);setTool('text');setSelectedMarks([])}
-        const shortcuts:Record<string,ReaderTool>={v:'select',h:'highlight',m:'marker',p:'ink',e:'erase',g:'move',r:'rounded-rectangle',c:'circle',o:'oval',l:'line'};
+        const shortcuts:Record<string,ReaderTool>={v:'select',a:'text',h:'highlight',m:'marker',p:'ink',e:'erase',g:'move',r:'rounded-rectangle',c:'circle',o:'oval',l:'line'};
         if(shortcuts[event.key.toLowerCase()]){event.preventDefault();setTool(shortcuts[event.key.toLowerCase()]);setShowShapes(false);if(!ringLocked)setShowControls(false);setPalette(false);setActions(false)}
       }
     };window.addEventListener('keydown',handler);return()=>window.removeEventListener('keydown',handler);

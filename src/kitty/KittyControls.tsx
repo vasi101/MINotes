@@ -14,7 +14,8 @@ export function WebSearchToggle({ disabled = false }: { disabled?: boolean }) {
       disabled={disabled}
       aria-pressed={webSearch}
       onClick={() => update({ webSearch: !webSearch })}
-      title="Search online sources for questions and explanations"
+      aria-label="Web search"
+      title="Web search"
     >
       <svg
         viewBox="0 0 20 20"
@@ -29,7 +30,6 @@ export function WebSearchToggle({ disabled = false }: { disabled?: boolean }) {
         <ellipse cx="10" cy="10" rx="3.5" ry="7.5" />
         <path d="M3 7h14M3 13h14" />
       </svg>
-      Web search
     </button>
   );
 }
